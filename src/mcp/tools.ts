@@ -160,6 +160,39 @@ server.registerTool('parse_line', {
   return text({ ...p, dueLocal: p.due ? formatDue(p.due) : null });
 });
 
+server.registerTool('list_messages', {
+  description: 'Read the talk lane — the message channel between the user and you. The user types lines starting with ">" in the Pyre bar and they land here. Poll this at the start of a session, and whenever the user mentions Pyre, to see if anything is waiting. Unread user messages are the ones you have not answered yet.',
+  inputSchema: {
+    unreadOnly: z.boolean().optional().describe('Only messages the agent has not marked read yet'),
+    limit: z.number().int().min(1).max(200).optional().describe('Most recent N (default 50)'),
+    markRead: z.boolean().optional().describe('Mark the returned user messages as read'),
+  },
+}, async (a) => {
+  fresh();
+  let list = store.messages();
+  if (a.unreadOnly) list = list.filter((m) => m.role === 'user' && !m.read);
+  const limit = a.limit ?? 50;
+  if (list.length > limit) list = list.slice(list.length - limit);
+  if (a.markRead) store.markRead('user');
+  return text({
+    messages: list,
+    unreadFromUser: store.messages().filter((m) => m.role === 'user' && !m.read).length,
+    hint: 'Reply with send_message. The user sees it in the lane under the composer.',
+  });
+});
+
+server.registerTool('send_message', {
+  description: 'Write a line into the talk lane, visible to the user under the Pyre composer. Use it to answer a ">" message, to report what you changed on the wall, or to ask a question. Keep it short — the rail is 340px wide. This does NOT create a note; use add_note for that.',
+  inputSchema: { text: z.string().min(1).describe('Plain text. No markdown rendering; newlines are kept.') },
+}, async (a) => {
+  fresh();
+  try {
+    const m = store.say('agent', a.text);
+    store.markRead('user'); // answering implies you read it
+    return text(m);
+  } catch (e) { return fail((e as Error).message); }
+});
+
 server.registerTool('get_grid', {
   description: 'Occupancy map of the wall: { cols, noteSize, rows, cells: [{col,row,id,topic,state,burn,placement}] } plus the first free cell, so you can reason about placement before pinning.',
   inputSchema: {},

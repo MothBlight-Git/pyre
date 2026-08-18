@@ -6,7 +6,7 @@
  * Enter commits, Esc clears. Chips appear on first keystroke and fade 200ms
  * after commit.
  */
-import { parseLine, parseCommand, formatDue, displayTopic, type ParsedLine, type Command } from '../shared/parse';
+import { parseLine, parseCommand, parseMessage, formatDue, displayTopic, type ParsedLine, type Command } from '../shared/parse';
 
 export interface ComposerDeps {
   input: HTMLInputElement;
@@ -15,6 +15,7 @@ export interface ComposerDeps {
   defaultTime: () => string;
   onCommit: (p: ParsedLine) => Promise<void>;
   onCommand: (c: Command) => Promise<void> | void;
+  onMessage: (text: string) => Promise<void>;
 }
 
 export function installComposer(d: ComposerDeps): { focus: () => void; refresh: () => void } {
@@ -32,6 +33,15 @@ export function installComposer(d: ComposerDeps): { focus: () => void; refresh: 
     if (!raw.trim()) { d.chips.hidden = true; d.cmdChip.hidden = true; return; }
     if (fadeTimer) { window.clearTimeout(fadeTimer); fadeTimer = null; }
     delete d.chips.dataset.fading;
+
+    // "> …" is a message to the connected agent, not a note.
+    const msg = parseMessage(raw);
+    if (msg !== null || raw.trimStart().startsWith('>')) {
+      d.chips.hidden = true;
+      d.cmdChip.hidden = false;
+      d.cmdChip.textContent = msg ? 'SAY TO AGENT' : 'SAY TO AGENT …';
+      return;
+    }
 
     // A bar command owns the line: show one chip saying what Enter will do.
     const cmd = parseCommand(raw);
@@ -69,6 +79,9 @@ export function installComposer(d: ComposerDeps): { focus: () => void; refresh: 
   d.input.addEventListener('keydown', async (ev) => {
     if (ev.key === 'Enter') {
       ev.preventDefault();
+      const msg = parseMessage(d.input.value);
+      if (msg) { clear(); await d.onMessage(msg); return; }
+      if (d.input.value.trimStart().startsWith('>')) return; // "> " alone: nothing to say yet
       const cmd = parseCommand(d.input.value);
       if (cmd) { clear(); await d.onCommand(cmd); return; }
       const p = parseLine(d.input.value, { defaultTime: d.defaultTime() });

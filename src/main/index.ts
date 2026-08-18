@@ -54,10 +54,11 @@ function runApp(): void {
   const { app, BrowserWindow, globalShortcut, Tray, Menu, nativeImage, screen } = electron;
   const { resolvePaths } = require('./paths') as typeof import('./paths');
   const { Store } = require('./store') as typeof import('./store');
-  const { createRailWindow, applyBounds, rendererEntry } = require('./window') as typeof import('./window');
+  const { createRailWindow, applyBounds, railBoundsOnMonitor, rendererEntry } = require('./window') as typeof import('./window');
   const { registerIpc, wireStoreEvents } = require('./ipc') as typeof import('./ipc');
   const { emberIcon } = require('./icon') as typeof import('./icon');
   const { startMcpHttp } = require('./mcp-http') as typeof import('./mcp-http');
+  const appbar = require('./appbar') as typeof import('./appbar');
 
   const gotLock = app.requestSingleInstanceLock();
   if (!gotLock) {
@@ -105,6 +106,30 @@ function runApp(): void {
     }
     if (s.mcpHttpPort !== prev.mcpHttpPort) void restartMcpHttp(s.mcpHttpPort);
     applyBounds(win, s);
+    applyReserve(s);
+  };
+
+  /**
+   * Keep the AppBar registration in step with the setting, the dock side and
+   * the width. Windows can hand back a different rect than we asked for, in
+   * which case the window moves to what we were actually given.
+   */
+  const applyReserve = (s: import('../shared/types').Settings) => {
+    if (!win) return;
+    if (!s.reserveScreenSpace) {
+      if (appbar.isReserved()) { appbar.release(win, log); applyBounds(win, s); }
+      return;
+    }
+    // Two conversions matter here:
+    //  - the rect MUST be the monitor rect, not railBounds() (see railBoundsOnMonitor)
+    //  - SHAppBarMessage is Win32, so it wants PHYSICAL pixels, while Electron's
+    //    screen/setBounds APIs speak DIPs. On a scaled display those differ, and
+    //    passing DIPs makes the rect miss the screen edge, so Windows quietly
+    //    reserves nothing.
+    const wantDip = railBoundsOnMonitor(s);
+    const wantPx = screen.dipToScreenRect(win, wantDip);
+    const grantedPx = appbar.reserve(win, s.dockSide, wantPx, log);
+    if (grantedPx) win.setBounds(screen.screenToDipRect(win, grantedPx));
   };
 
   app.on('second-instance', () => focusComposer());
@@ -123,9 +148,11 @@ function runApp(): void {
     wireStoreEvents(store, () => win);
     registerHotkey(store.settings().globalHotkey);
     void restartMcpHttp(store.settings().mcpHttpPort);
+    // After the window exists and is shown, claim screen space if asked.
+    win.once('ready-to-show', () => applyReserve(store.settings()));
 
     // Re-dock on display changes.
-    const redock = () => { if (win) applyBounds(win, store.settings()); };
+    const redock = () => { if (win) { applyBounds(win, store.settings()); applyReserve(store.settings()); } };
     screen.on('display-metrics-changed', redock);
     screen.on('display-added', redock);
     screen.on('display-removed', redock);
@@ -168,5 +195,7 @@ function runApp(): void {
     globalShortcut.unregisterAll();
     store.unwatch();
     mcpHttp?.close();
+    // Hand the reserved strip back, or every other window keeps avoiding it.
+    if (win) appbar.release(win, log);
   });
 }

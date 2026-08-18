@@ -22,6 +22,23 @@ export function railBounds(s: Settings): { x: number; y: number; width: number; 
   return { x, y: wa.y, width, height: wa.height };
 }
 
+/**
+ * The rail against the FULL monitor rectangle, ignoring the work area.
+ *
+ * This is what an AppBar reservation must be computed from. `railBounds()`
+ * derives from `workArea`, which already excludes any space we ourselves
+ * reserved — feeding that back into a reservation walks the window across the
+ * screen a rail-width at a time on every settings change. Windows trims this
+ * rect for other appbars (the taskbar) during ABM_QUERYPOS.
+ */
+export function railBoundsOnMonitor(s: Settings): { x: number; y: number; width: number; height: number } {
+  const d = pickDisplay(s.displayId);
+  const b = d.bounds;
+  const width = Math.max(MIN_RAIL, Math.min(MAX_RAIL, s.railWidth));
+  const x = s.dockSide === 'left' ? b.x : b.x + b.width - width;
+  return { x, y: b.y, width, height: b.height };
+}
+
 export function createRailWindow(s: Settings, preload: string): BrowserWindow {
   const b = railBounds(s);
   const win = new BrowserWindow({

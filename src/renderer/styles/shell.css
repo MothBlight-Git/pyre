@@ -129,6 +129,74 @@ html[data-mock] .sheet { left: calc(100% - var(--mock-rail, 340px)); }
 .meta-btn:hover { color: var(--bone); }
 
 /* --------------------------------------------------------------------------
+   TALK LANE
+   The channel to the connected agent. Soot and bone on the desktop, never
+   paper — a message is not a note, and must never read as one. No chroma:
+   the agent's provenance is the same 2px #3A322C tick the grid already uses.
+   -------------------------------------------------------------------------- */
+.lane {
+  margin: 0 var(--gutter) 10px;
+  border: 1px solid var(--soot);
+  border-radius: 3px;
+  background: rgba(20,17,15,.55);
+  -webkit-app-region: no-drag;
+}
+.lane__log {
+  max-height: 172px;
+  overflow-y: auto;
+  padding: 8px 9px;
+  scrollbar-width: none;
+  display: flex; flex-direction: column; gap: 7px;
+}
+.lane__log::-webkit-scrollbar { width: 0; }
+
+.msg {
+  position: relative;
+  padding-left: 9px;
+  font-family: var(--serif);
+  font-size: 12.5px; line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.msg::before {
+  content: ''; position: absolute; left: 0; top: 1px; bottom: 1px; width: 2px;
+}
+/* You: bone type behind a bone rule. */
+.msg[data-role="user"]        { color: var(--bone); }
+.msg[data-role="user"]::before { background: rgba(232,226,214,.45); }
+/* The agent: the same soot provenance tick agent-made notes carry. */
+.msg[data-role="agent"]        { color: var(--ink-on-soot); }
+.msg[data-role="agent"]::before { background: #3A322C; }
+/* Unanswered — the agent has not read it yet. */
+.msg[data-role="user"][data-unread]::before { background: var(--bone); }
+
+.msg__when {
+  font-family: var(--mono); font-size: 9px; letter-spacing: .08em;
+  color: var(--ink-on-soot); opacity: .7; margin-left: 6px; white-space: nowrap;
+}
+
+.lane__foot {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 5px 9px 6px;
+  border-top: 1px solid var(--soot);
+}
+.lane__hint {
+  font-family: var(--mono); font-size: 9px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--ink-on-soot);
+}
+.lane__hint b { color: var(--bone); font-weight: 600; }
+.lane__pending { animation: lanePending 1.6s ease-in-out infinite; }
+@keyframes lanePending { 0%,100% { opacity: .45 } 50% { opacity: 1 } }
+
+/* Unread count on the TALK button. Bone, not chroma. */
+#btn-lane[data-unread] { color: var(--bone); }
+
+@media (prefers-reduced-motion: reduce) {
+  .lane__pending { animation: none; }
+}
+
+/* --------------------------------------------------------------------------
    EMPTY STATE
    -------------------------------------------------------------------------- */
 .empty {

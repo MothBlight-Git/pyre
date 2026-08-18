@@ -40,10 +40,30 @@ export interface Note {
   source: 'user' | 'agent' | string;
 }
 
-/** The on-disk file. */
+/**
+ * A line in the talk lane — the channel between the user and whatever agent is
+ * connected over MCP. The user types `> something` in the bar; an agent reads
+ * with `list_messages` and answers with `send_message`.
+ *
+ * Messages are NOT notes: they carry no deadline, never burn, and never take a
+ * grid cell. They live in the same file so the one watcher drives both.
+ */
+export interface Message {
+  /** "m_" + 6 base36 chars. */
+  id: string;
+  /** Who wrote it. `agent` renders with the same 2px #3A322C provenance tick notes use. */
+  role: 'user' | 'agent';
+  text: string;
+  created: string;
+  /** False until the other side has seen it. Drives the unread count. */
+  read: boolean;
+}
+
+/** The on-disk file. `messages` is optional so a v2 file without it stays valid. */
 export interface NoteFile {
   version: 2;
   notes: Note[];
+  messages?: Message[];
 }
 
 export interface Settings {
@@ -98,6 +118,11 @@ export interface AppInfo {
 
 /** The full bridge exposed as window.pyre — PyreApi plus app-level extras. */
 export interface PyreBridge extends PyreApi {
+  messages(): Promise<Message[]>;
+  say(text: string): Promise<Message>;
+  markMessagesRead(): Promise<void>;
+  clearMessages(): Promise<void>;
+  onMessages(cb: (m: Message[]) => void): () => void;
   restore(id: string): Promise<Note>;
   unbank(id: string): Promise<Note>;
   /** Persist layout() corrections without touching pinnedAt. */

@@ -31,6 +31,11 @@ export function registerIpc(host: IpcHost): void {
   h('notes:remove', (id) => store.remove(id));
   h('notes:correct', (corrections) => { store.correct(corrections); });
 
+  h('msg:list', () => store.messages());
+  h('msg:say', (text: string) => store.say('user', text));
+  h('msg:markRead', () => { store.markRead('agent'); });
+  h('msg:clear', () => { store.clearMessages(); });
+
   h('settings:get', () => store.settings());
   h('settings:set', (patch: Partial<Settings>) => {
     const prev = store.settings();
@@ -80,5 +85,6 @@ export function wireStoreEvents(store: Store, getWindow: () => BrowserWindow | n
   store.on('change', (notes) => send('notes:changed', notes));
   store.on('writeError', (msg) => send('notes:writeError', msg));
   store.on('writeOk', () => send('notes:writeOk'));
+  store.on('messages', (m) => send('msg:changed', m));
   store.on('settings', (s) => send('settings:changed', s));
 }

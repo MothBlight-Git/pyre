@@ -14,7 +14,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { createHash } from 'node:crypto';
-import type { Note, NoteFile, Settings, Placement } from '../shared/types';
+import type { Note, NoteFile, Settings, Placement, Message } from '../shared/types';
 import { migrate } from '../shared/migrate';
 import type { ResolvedPaths } from './paths';
 
@@ -33,11 +33,14 @@ export const DEFAULT_SETTINGS: Settings = {
 export const WRITE_ERROR_COPY =
   "Can't write to notes.json. Your last note is held in memory. Check file permissions.";
 
-export function newId(): string {
+export function newId(prefix = 'n_'): string {
   let s = '';
   while (s.length < 6) s += Math.random().toString(36).slice(2);
-  return 'n_' + s.slice(0, 6);
+  return prefix + s.slice(0, 6);
 }
+
+/** Talk lane is a conversation, not an archive — keep the tail bounded. */
+export const MAX_MESSAGES = 200;
 
 const nowIso = () => new Date().toISOString();
 
@@ -170,6 +173,7 @@ export class Store extends EventEmitter {
       }
       this.stopRetry();
       this.emit('change', this.notes());
+      this.emit('messages', this.messages());
       return true;
     } catch (e) {
       this.log(`write failed: ${(e as Error).message}`);
@@ -178,6 +182,7 @@ export class Store extends EventEmitter {
       this.writeFailing = true;
       this.emit('writeError', WRITE_ERROR_COPY);
       this.emit('change', this.notes()); // in-memory state still updates the grid
+      this.emit('messages', this.messages());
       this.startRetry();
       return false;
     }
@@ -251,7 +256,7 @@ export class Store extends EventEmitter {
     this.lastWrittenMtimeMs = st.mtimeMs;
     this.log('external change picked up');
     if (result.changed) this.write(); // repairs a hand-edited record; emits change
-    else this.emit('change', this.notes());
+    else { this.emit('change', this.notes()); this.emit('messages', this.messages()); }
   }
 
   // ---------------------------------------------------------------- settings
@@ -363,6 +368,42 @@ export class Store extends EventEmitter {
 
   unbank(id: string): Note {
     return this.mutate(id, (n) => { n.bankedUntil = null; n.bankedAt = null; });
+  }
+
+  // ------------------------------------------------------------ talk lane
+
+  messages(): Message[] {
+    return (this.file.messages ?? []).map((m) => ({ ...m }));
+  }
+
+  /**
+   * Append a line to the lane. `read: false` means the OTHER side hasn't seen
+   * it — a user message is unread by the agent, and vice versa.
+   */
+  say(role: 'user' | 'agent', text: string): Message {
+    const body = String(text ?? '').trim();
+    if (!body) throw new Error('message text is required');
+    const msg: Message = { id: newId('m_'), role, text: body, created: nowIso(), read: false };
+    const list = this.file.messages ?? (this.file.messages = []);
+    list.push(msg);
+    if (list.length > MAX_MESSAGES) list.splice(0, list.length - MAX_MESSAGES);
+    this.write();
+    return { ...msg };
+  }
+
+  /** Mark everything from `role` as seen. */
+  markRead(role: 'user' | 'agent'): void {
+    let touched = false;
+    for (const m of this.file.messages ?? []) {
+      if (m.role === role && !m.read) { m.read = true; touched = true; }
+    }
+    if (touched) this.write();
+  }
+
+  clearMessages(): void {
+    if (!this.file.messages?.length) return;
+    delete this.file.messages;
+    this.write();
   }
 
   remove(id: string): { ok: true } {

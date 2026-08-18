@@ -16,7 +16,7 @@ Build contract: [`CLAUDE.md`](CLAUDE.md). Design files: [`reference/`](reference
 
 ```bash
 npm install
-npm test          # 51 tests: burn curve, grid, parser, store, MCP stdio + HTTP end-to-end
+npm test          # 63 tests: burn curve, grid, parser, talk lane, store, MCP stdio + HTTP end-to-end
 npm start         # build + launch
 npm run dist      # release/Pyre.exe (single-file portable) · Pyre-Setup-*.exe (installer) · Pyre-*-win.zip (portable folder)
 ```
@@ -29,6 +29,7 @@ Type into the entry box: **`topic / comment / due`** then `Enter`.
 - `/ just a thought` → files under UNSORTED
 - Due forms: `today` `tonight` `tomorrow` `fri` `3d` `2w` `4h` `8/21` `2026-08-21` `8/21 3pm` `fri 9am` `3pm`. Default time 17:00 (settings).
 - Three chips preview the parse live. The due chip always shows the **resolved date**, never what you typed. If the last segment isn't a date it stays part of the comment.
+- **Talk lane.** A line starting with `>` is a message to the connected agent rather than a note: `> move winwater to friday`. It appears in a lane under the composer, the agent reads it with `list_messages` and answers with `send_message`. `>` outranks everything, so a message may contain slashes freely.
 - **Bar commands.** A line with no `/` reading `quit` (or `exit`) closes the app — the chip row swaps to a single `QUIT PYRE` chip so you can see what Enter will do before you commit to it. Anything containing a `/` is always a note, so `/ quit` still files a note.
 
 | Action | Mouse | Keyboard (note focused) |
@@ -45,6 +46,7 @@ Type into the entry box: **`topic / comment / due`** then `Enter`.
 | Resize the rail (280–420) | drag its inner edge, or the slider in Settings | |
 | Move the window | drag the invisible 28px strip along its top | |
 | **Quit** | tray icon → Quit Pyre | type `quit` or `exit` in the bar → Enter |
+| **Talk to the agent** | `TALK` button opens the lane | type `> your message` in the bar → Enter |
 
 **Placement rule.** Auto notes sort by heat (hottest top-left), then dated above undated, then newest. A note you dragged holds its cell forever — a fire will flow *around* it, never evict it. If a pinned note catches fire below the fold, an ember pip appears bottom-right; click it to scroll there.
 
@@ -73,6 +75,11 @@ The file format is the contract (see `src/shared/types.ts`):
     "bankedUntil": null, "bankedAt": null,      // snooze; never touches due
     "placement": { "mode": "auto" },            // or { "mode":"manual", "col":0, "row":2, "pinnedAt":"…" }
     "source": "user"                            // "agent" draws a 2px tick on the left edge
+  }],
+  "messages": [{                                // optional; the talk lane
+    "id": "m_4k2p9a", "role": "user",           // "user" | "agent"
+    "text": "move winwater to friday",
+    "created": "…", "read": false               // read = the OTHER side has seen it
   }]
 }
 ```
@@ -89,7 +96,9 @@ Point Claude Code (or any script) at `notes.json`. Writes are picked up within ~
 
 ### 2. Built-in MCP server — two transports, same tools
 
-Tools: `list_notes` (with computed burn/state/slot) · `add_note` · `update_note` · `move_note` · `release_note` · `bank_note` · `snuff_note` · `restore_note` · `delete_note` · `parse_line` (dry-run the grammar) · `get_grid` (occupancy map + first free cell). The app and the MCP server share `src/shared/heat.ts`, so an agent's `burn` is exactly what's on the screen.
+Tools: `list_notes` (with computed burn/state/slot) · `add_note` · `update_note` · `move_note` · `release_note` · `bank_note` · `snuff_note` · `restore_note` · `delete_note` · `parse_line` (dry-run the grammar) · `get_grid` (occupancy map + first free cell) · **`list_messages`** and **`send_message`** (the talk lane).
+
+**The talk lane is pull-based.** When the user types `> …` it is written to the file and shown as waiting, but nothing pushes it to you — an agent sees it when it calls `list_messages`. Poll that at the start of a session, or whenever the user mentions Pyre. The app and the MCP server share `src/shared/heat.ts`, so an agent's `burn` is exactly what's on the screen.
 
 **Settings → AI access** shows both configs with the correct path/port and COPY buttons.
 
@@ -143,4 +152,6 @@ scripts/       dev helpers (debug driver client, icon)
 - `PYRE_DEBUG=1` logs store/watcher activity. `PYRE_DEVTOOLS=1` opens DevTools. `PYRE_DEBUG_DRIVER=<dir>` enables a file-driven debug driver (`scripts/drive.mjs`) that can screenshot and script the live window.
 - Running the renderer outside Electron (`npx vite --config vite.config.mts`) installs an in-memory mock bridge with sample notes in every state — handy for visual checks against `reference/note-example.html`.
 - Decisions taken on the spec's open items: 9A gone-out (not 9B stalled); 24h ambient warmth kept; a pinned note never auto-releases; no snuff confirmation; single display via settings.
+- `reserveScreenSpace` registers the rail as a Windows AppBar (via koffi → `SHAppBarMessage`), so maximised windows stop at its edge. Two things make it fiddly and are worth knowing if you touch it: the reservation must be computed from the **monitor** rect, not the work area (which already excludes your own bar, so it walks across the screen), and it must be in **physical pixels**, not Electron's DIPs. The whole path is wrapped so an FFI failure only means the setting does nothing.
+- Talk-lane messages live in the same `notes.json` under an optional `messages` array, so the one watcher delivers both. A file without the key stays valid and only gains it when the lane is first used.
 - One correction to the shipped spec: `spec/heat.ts` froze a banked note's burn as of `bankedUntil` (the future) and failed its own test; the record now carries `bankedAt` and the front freezes at the burn it held when banking began.

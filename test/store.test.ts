@@ -121,3 +121,72 @@ describe('paths', () => {
     expect(fs.readdirSync(path.join(dir, 'a', 'b')).length).toBe(0);
   });
 });
+
+describe('talk lane', () => {
+  it('appends messages, keeps notes untouched, and survives a reload', () => {
+    const s = new Store(paths);
+    s.load();
+    s.add({ topic: 'T', comment: 'a note' });
+    const m = s.say('user', '  move winwater to friday  ');
+    expect(m.role).toBe('user');
+    expect(m.text).toBe('move winwater to friday'); // trimmed
+    expect(m.read).toBe(false);
+    expect(m.id.startsWith('m_')).toBe(true);
+
+    const onDisk = JSON.parse(fs.readFileSync(paths.notesFile, 'utf8'));
+    expect(onDisk.messages).toHaveLength(1);
+    expect(onDisk.notes).toHaveLength(1);
+
+    const s2 = new Store(paths);
+    s2.load();
+    expect(s2.messages()[0].text).toBe('move winwater to friday');
+  });
+
+  it('marks one side read without touching the other', () => {
+    const s = new Store(paths);
+    s.load();
+    s.say('user', 'question');
+    s.say('agent', 'answer');
+    s.markRead('user');
+    const m = s.messages();
+    expect(m.find((x) => x.role === 'user')!.read).toBe(true);
+    expect(m.find((x) => x.role === 'agent')!.read).toBe(false);
+  });
+
+  it('rejects empty text and bounds the tail', () => {
+    const s = new Store(paths);
+    s.load();
+    expect(() => s.say('user', '   ')).toThrow();
+    for (let i = 0; i < 210; i++) s.say('user', 'm' + i);
+    expect(s.messages().length).toBe(200);
+    expect(s.messages()[199].text).toBe('m209'); // newest kept
+    s.clearMessages();
+    expect(s.messages()).toHaveLength(0);
+  });
+
+  it('a file with no messages key stays valid and gains one only when used', () => {
+    fs.writeFileSync(paths.notesFile, JSON.stringify({ version: 2, notes: [] }));
+    const s = new Store(paths);
+    s.load();
+    expect(s.messages()).toHaveLength(0);
+    expect(JSON.parse(fs.readFileSync(paths.notesFile, 'utf8')).messages).toBeUndefined();
+    s.say('agent', 'hello');
+    expect(JSON.parse(fs.readFileSync(paths.notesFile, 'utf8')).messages).toHaveLength(1);
+  });
+
+  it('repairs a hand-written message and drops an unusable one', () => {
+    fs.writeFileSync(paths.notesFile, JSON.stringify({
+      version: 2, notes: [],
+      messages: [{ text: 'typed by hand' }, { role: 'agent' }, { id: 'm_x', role: 'nonsense', text: 'ok', created: 'bad', read: 'yes' }],
+    }));
+    const s = new Store(paths);
+    s.load();
+    const m = s.messages();
+    expect(m).toHaveLength(2);            // the one with no text is dropped
+    expect(m[0].role).toBe('agent');      // defaulted
+    expect(m[0].id.startsWith('m_')).toBe(true);
+    expect(m[1].role).toBe('agent');      // 'nonsense' normalised
+    expect(m[1].read).toBe(false);
+    expect(Number.isNaN(Date.parse(m[1].created))).toBe(false);
+  });
+});

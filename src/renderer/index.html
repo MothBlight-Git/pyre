@@ -26,11 +26,21 @@
       <div class="rail__meta" id="rail-meta">
         <span class="rail__count" id="rail-count"></span>
         <span class="rail__meta-actions">
+          <button class="meta-btn" id="btn-lane" type="button" title="Talk to the connected agent (type &gt; in the bar)" aria-expanded="false" hidden>TALK</button>
           <button class="meta-btn" id="btn-archive" type="button" title="Done archive">DONE</button>
           <button class="meta-btn" id="btn-settings" type="button" title="Settings">SETTINGS</button>
         </span>
       </div>
     </div>
+
+    <!-- Talk lane: the channel to whatever agent is connected over MCP. -->
+    <section class="lane" id="lane" hidden aria-label="Messages with the connected agent">
+      <div class="lane__log" id="lane-log" role="log" aria-live="polite"></div>
+      <div class="lane__foot">
+        <span class="lane__hint" id="lane-hint">Type <b>&gt;</b> in the bar to say something</span>
+        <button class="meta-btn" id="btn-lane-clear" type="button" title="Clear the lane">CLEAR</button>
+      </div>
+    </section>
 
     <div class="rail__surface" id="surface">
       <div class="drop-target" id="drop-target" hidden></div>

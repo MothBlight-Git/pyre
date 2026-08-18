@@ -4,7 +4,7 @@
  * bridge with the same contract so the whole UI can be exercised and visually
  * checked against note-example.html. Never used in the packaged app.
  */
-import type { Note, Settings, PyreBridge, AppInfo, Placement } from '../shared/types';
+import type { Note, Settings, PyreBridge, AppInfo, Placement, Message } from '../shared/types';
 
 export function installMockBridge(): void {
   if (window.pyre) return;
@@ -34,8 +34,13 @@ export function installMockBridge(): void {
     dockSide: 'right', railWidth: +(q.get('w') ?? 340), alwaysOnTop: true, reserveScreenSpace: false,
     defaultDueTime: '17:00', globalHotkey: 'Control+Alt+N', startWithSystem: false, displayId: null, mcpHttpPort: 41777,
   };
-  const listeners = { change: new Set<(n: Note[]) => void>(), settings: new Set<(s: Settings) => void>(), err: new Set<(m: string) => void>(), ok: new Set<() => void>(), focus: new Set<() => void>(), open: new Set<() => void>() };
+  let messages: Message[] = q.has('msgs') ? [
+    { id: 'm_1', role: 'user', text: 'move winwater to friday please', created: new Date(now - 6 * 60000).toISOString(), read: true },
+    { id: 'm_2', role: 'agent', text: 'Moved WINWATER to Fri 21 Aug 17:00 and left it on auto placement.', created: new Date(now - 5 * 60000).toISOString(), read: false },
+  ] : [];
+  const listeners = { change: new Set<(n: Note[]) => void>(), settings: new Set<(s: Settings) => void>(), err: new Set<(m: string) => void>(), ok: new Set<() => void>(), focus: new Set<() => void>(), open: new Set<() => void>(), msgs: new Set<(m: Message[]) => void>() };
   const emit = () => { const copy = notes.map((n) => ({ ...n })); for (const cb of listeners.change) cb(copy); };
+  const emitMsgs = () => { const copy = messages.map((m) => ({ ...m })); for (const cb of listeners.msgs) cb(copy); };
   const find = (id: string) => { const n = notes.find((x) => x.id === id); if (!n) throw new Error('no note ' + id); return n; };
   const touch = (n: Note) => { n.updated = new Date().toISOString(); emit(); return { ...n }; };
   const on = <T,>(set: Set<T>) => (cb: T) => { set.add(cb); return () => set.delete(cb); };
@@ -58,6 +63,21 @@ export function installMockBridge(): void {
     unbank: async (id) => { const n = find(id); n.bankedUntil = null; n.bankedAt = null; return touch(n); },
     remove: async (id) => { notes = notes.filter((n) => n.id !== id); emit(); return { ok: true }; },
     correct: async (c) => { for (const x of c) { const n = notes.find((y) => y.id === x.id); if (n && n.placement.mode === 'manual') n.placement = { ...n.placement, col: x.col, row: x.row }; } },
+    messages: async () => messages.map((m) => ({ ...m })),
+    say: async (text: string) => {
+      const m: Message = { id: 'm_' + Math.random().toString(36).slice(2, 8), role: 'user', text, created: new Date().toISOString(), read: false };
+      messages.push(m); emitMsgs();
+      // Mock only: a canned reply so the lane can be exercised without an agent.
+      window.setTimeout(() => {
+        messages.push({ id: 'm_' + Math.random().toString(36).slice(2, 8), role: 'agent', text: 'Mock reply to: ' + text, created: new Date().toISOString(), read: false });
+        messages = messages.map((x) => x.role === 'user' ? { ...x, read: true } : x);
+        emitMsgs();
+      }, 1200);
+      return { ...m };
+    },
+    markMessagesRead: async () => { messages = messages.map((m) => m.role === 'agent' ? { ...m, read: true } : m); emitMsgs(); },
+    clearMessages: async () => { messages = []; emitMsgs(); },
+    onMessages: on(listeners.msgs),
     settings: async () => ({ ...settings }),
     setSettings: async (patch) => { settings = { ...settings, ...patch }; applyRail(); for (const cb of listeners.settings) cb({ ...settings }); return { ...settings }; },
     resizeRail: async (w) => bridge.setSettings({ railWidth: w }),

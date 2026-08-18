@@ -51,7 +51,23 @@ const COMMANDS: Array<{ words: string[]; kind: CommandKind; label: string }> = [
   { words: ['quit', 'exit'], kind: 'quit', label: 'QUIT PYRE' },
 ];
 
+/**
+ * A line beginning with `>` is a message to the connected agent, not a note.
+ * Returns the message body, or null when the line is not a message.
+ *
+ * `>` wins over everything — including slashes — so you can say
+ * `> move winwater / powell to friday` without it becoming a note. It is the
+ * first character of the line, which nothing else in the grammar claims.
+ */
+export function parseMessage(line: string): string | null {
+  const s = line.trimStart();
+  if (!s.startsWith('>')) return null;
+  const body = s.slice(1).trim();
+  return body ? body : null;
+}
+
 export function parseCommand(line: string): Command | null {
+  if (line.trimStart().startsWith('>')) return null;
   if (line.includes('/')) return null;
   const s = line.trim().toLowerCase();
   if (!s) return null;

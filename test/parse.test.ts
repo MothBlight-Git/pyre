@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseLine, parseDue, parseCommand, formatDue, toLine } from '../src/shared/parse';
+import { parseLine, parseDue, parseCommand, parseMessage, formatDue, toLine } from '../src/shared/parse';
 
 // Monday 2026-08-17 10:00 local
 const NOW = new Date(2026, 7, 17, 10, 0, 0, 0);
@@ -118,5 +118,25 @@ describe('bar commands', () => {
     expect(parseCommand('quitting')).toBeNull();
     expect(parseCommand('winwater')).toBeNull();
     expect(parseCommand('')).toBeNull();
+  });
+});
+
+describe('talk lane grammar', () => {
+  it('treats a leading > as a message to the agent', () => {
+    expect(parseMessage('> move winwater to friday')).toBe('move winwater to friday');
+    expect(parseMessage('  >   spaced  ')).toBe('spaced');
+  });
+  it('lets a message contain slashes without becoming a note', () => {
+    expect(parseMessage('> reschedule winwater / powell / friday')).toBe('reschedule winwater / powell / friday');
+  });
+  it('is not a message without the marker, and not empty', () => {
+    expect(parseMessage('winwater / send bep')).toBeNull();
+    expect(parseMessage('>')).toBeNull();
+    expect(parseMessage('>   ')).toBeNull();
+    expect(parseMessage('a > b')).toBeNull();
+  });
+  it('outranks commands, so "> quit" talks rather than closing the app', () => {
+    expect(parseCommand('> quit')).toBeNull();
+    expect(parseMessage('> quit')).toBe('quit');
   });
 });

@@ -144,6 +144,7 @@ export class Sheets {
     row('Global hotkey', hk);
 
     row('Start with system', toggle(s.startWithSystem, (v) => void set({ startWithSystem: v })));
+    row('Reserve screen space', toggle(s.reserveScreenSpace, (v) => void set({ reserveScreenSpace: v })));
 
     // Display
     if (info.displays.length > 1) {
@@ -186,6 +187,9 @@ export class Sheets {
         });
         return b;
       };
+
+      const rsNote = h('p', 'set__note', 'Reserve screen space registers the rail as a Windows AppBar, so maximised windows stop at its edge instead of hiding behind it.');
+      body.appendChild(rsNote);
 
       const blk = h('div', 'set__block');
       blk.appendChild(h('span', 'set__label', 'AI access'));

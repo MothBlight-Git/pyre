@@ -9,6 +9,7 @@ import { GridView } from './grid-view';
 import { installDrag } from './drag';
 import { installComposer } from './composer';
 import { Sheets } from './sheets';
+import { Lane } from './lane';
 import type { NoteAction } from './note';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -199,6 +200,21 @@ const composer = installComposer({
   onCommand: async (c) => {
     if (c.kind === 'quit') await window.pyre.quit();
   },
+  onMessage: async (text) => {
+    await window.pyre.say(text);
+    lane.markAwaiting();
+  },
+});
+
+// ---------------------------------------------------------------- talk lane
+
+const lane = new Lane({
+  root: $('lane'),
+  log: $('lane-log'),
+  hint: $('lane-hint'),
+  toggle: $('btn-lane'),
+  clear: $('btn-lane-clear'),
+  rail,
 });
 
 // ---------------------------------------------------------------- sheets
@@ -248,6 +264,7 @@ installDrag({
 
 function wireBridge(): void {
   window.pyre.onChange((notes) => applyNotes(notes));
+  window.pyre.onMessages((msgs) => lane.setMessages(msgs));
   window.pyre.onSettings((s) => applySettings(s));
   window.pyre.onWriteError((msg) => { writeError.textContent = msg; writeError.hidden = false; });
   window.pyre.onWriteOk(() => { writeError.hidden = true; });
@@ -266,6 +283,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) runT
   wireBridge();
   applySettings(await window.pyre.settings());
   applyNotes(await window.pyre.list());
+  lane.setMessages(await window.pyre.messages());
   // Re-tick when the clock jumps (sleep/resume): a cheap 60s guard on top of the variable tick.
   window.setInterval(() => runTick(), 60_000);
 })();
