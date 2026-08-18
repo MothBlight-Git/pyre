@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseLine, parseDue, formatDue, toLine } from '../src/shared/parse';
+import { parseLine, parseDue, parseCommand, formatDue, toLine } from '../src/shared/parse';
 
 // Monday 2026-08-17 10:00 local
 const NOW = new Date(2026, 7, 17, 10, 0, 0, 0);
@@ -100,5 +100,23 @@ describe('formatting', () => {
     expect(p.topic).toBe('WINWATER');
     expect(p.comment).toBe('Send BEP');
     expect(p.due).toBe(local(2026, 8, 21, 9, 30));
+  });
+});
+
+describe('bar commands', () => {
+  it('recognises quit and exit, case-insensitively', () => {
+    expect(parseCommand('quit')?.kind).toBe('quit');
+    expect(parseCommand('  EXIT  ')?.kind).toBe('quit');
+    expect(parseCommand('quit')?.label).toBe('QUIT PYRE');
+  });
+  it('never fires when the line contains a slash — that is always a note', () => {
+    expect(parseCommand('/quit')).toBeNull();
+    expect(parseCommand('quit / do the thing')).toBeNull();
+    expect(parseLine('/ quit', opts)).toMatchObject({ topic: '', comment: 'quit', valid: true });
+  });
+  it('leaves ordinary words alone', () => {
+    expect(parseCommand('quitting')).toBeNull();
+    expect(parseCommand('winwater')).toBeNull();
+    expect(parseCommand('')).toBeNull();
   });
 });

@@ -29,6 +29,7 @@ Type into the entry box: **`topic / comment / due`** then `Enter`.
 - `/ just a thought` → files under UNSORTED
 - Due forms: `today` `tonight` `tomorrow` `fri` `3d` `2w` `4h` `8/21` `2026-08-21` `8/21 3pm` `fri 9am` `3pm`. Default time 17:00 (settings).
 - Three chips preview the parse live. The due chip always shows the **resolved date**, never what you typed. If the last segment isn't a date it stays part of the comment.
+- **Bar commands.** A line with no `/` reading `quit` (or `exit`) closes the app — the chip row swaps to a single `QUIT PYRE` chip so you can see what Enter will do before you commit to it. Anything containing a `/` is always a note, so `/ quit` still files a note.
 
 | Action | Mouse | Keyboard (note focused) |
 |---|---|---|
@@ -43,6 +44,7 @@ Type into the entry box: **`topic / comment / due`** then `Enter`.
 | Done archive / Settings | `DONE` / `SETTINGS` under the entry box | `Ctrl+,` for settings |
 | Resize the rail (280–420) | drag its inner edge, or the slider in Settings | |
 | Move the window | drag the invisible 28px strip along its top | |
+| **Quit** | tray icon → Quit Pyre | type `quit` or `exit` in the bar → Enter |
 
 **Placement rule.** Auto notes sort by heat (hottest top-left), then dated above undated, then newest. A note you dragged holds its cell forever — a fire will flow *around* it, never evict it. If a pinned note catches fire below the fold, an ember pip appears bottom-right; click it to scroll there.
 

@@ -35,6 +35,30 @@ export interface ParseOptions {
 
 export const UNSORTED = 'UNSORTED';
 
+/**
+ * Bar commands. Typed into the composer instead of a note.
+ *
+ * A command is only recognised when the line carries NO `/` — a slash always
+ * means "this is a note", so `/quit` still files a note under UNSORTED and can
+ * never close the app by accident. A bare word is not a valid note anyway (a
+ * note needs a comment), so this claims no syntax that used to do something.
+ */
+export type CommandKind = 'quit';
+
+export interface Command { kind: CommandKind; label: string }
+
+const COMMANDS: Array<{ words: string[]; kind: CommandKind; label: string }> = [
+  { words: ['quit', 'exit'], kind: 'quit', label: 'QUIT PYRE' },
+];
+
+export function parseCommand(line: string): Command | null {
+  if (line.includes('/')) return null;
+  const s = line.trim().toLowerCase();
+  if (!s) return null;
+  const hit = COMMANDS.find((c) => c.words.includes(s));
+  return hit ? { kind: hit.kind, label: hit.label } : null;
+}
+
 export function parseLine(line: string, opts: ParseOptions = {}): ParsedLine {
   const raw = line.replace(/\r?\n/g, ' ');
   const segs = raw.split('/').map((s) => s.trim());

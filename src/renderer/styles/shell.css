@@ -102,6 +102,12 @@ html[data-mock] .sheet { left: calc(100% - var(--mock-rail, 340px)); }
 .chip[data-role="due"][data-empty] { display: none; }
 .chip[data-role="due"][data-empty][data-show] { display: inline; }
 
+/* Bar command preview ("quit" → QUIT PYRE). Same chip language, still no chroma. */
+.chip--cmd {
+  display: inline-block; margin-top: 8px;
+  animation: chipsIn 160ms ease-out both;
+}
+
 .composer__error {
   margin-top: 8px; padding: 6px 0 0;
   border-top: 1px solid var(--write-error);

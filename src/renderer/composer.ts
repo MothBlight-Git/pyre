@@ -6,13 +6,15 @@
  * Enter commits, Esc clears. Chips appear on first keystroke and fade 200ms
  * after commit.
  */
-import { parseLine, formatDue, displayTopic, type ParsedLine } from '../shared/parse';
+import { parseLine, parseCommand, formatDue, displayTopic, type ParsedLine, type Command } from '../shared/parse';
 
 export interface ComposerDeps {
   input: HTMLInputElement;
   chips: HTMLElement;
+  cmdChip: HTMLElement;
   defaultTime: () => string;
   onCommit: (p: ParsedLine) => Promise<void>;
+  onCommand: (c: Command) => Promise<void> | void;
 }
 
 export function installComposer(d: ComposerDeps): { focus: () => void; refresh: () => void } {
@@ -27,9 +29,19 @@ export function installComposer(d: ComposerDeps): { focus: () => void; refresh: 
 
   const render = () => {
     const raw = d.input.value;
-    if (!raw.trim()) { d.chips.hidden = true; return; }
+    if (!raw.trim()) { d.chips.hidden = true; d.cmdChip.hidden = true; return; }
     if (fadeTimer) { window.clearTimeout(fadeTimer); fadeTimer = null; }
     delete d.chips.dataset.fading;
+
+    // A bar command owns the line: show one chip saying what Enter will do.
+    const cmd = parseCommand(raw);
+    if (cmd) {
+      d.chips.hidden = true;
+      d.cmdChip.hidden = false;
+      d.cmdChip.textContent = cmd.label;
+      return;
+    }
+    d.cmdChip.hidden = true;
     d.chips.hidden = false;
     const p = parseLine(raw, { defaultTime: d.defaultTime() });
     setChip(topicChip, displayTopic(p.topic), false, 'topic');
@@ -48,6 +60,7 @@ export function installComposer(d: ComposerDeps): { focus: () => void; refresh: 
 
   const clear = () => {
     d.input.value = '';
+    d.cmdChip.hidden = true;
     d.chips.dataset.fading = '';
     fadeTimer = window.setTimeout(() => { d.chips.hidden = true; delete d.chips.dataset.fading; fadeTimer = null; }, 200);
   };
@@ -56,6 +69,8 @@ export function installComposer(d: ComposerDeps): { focus: () => void; refresh: 
   d.input.addEventListener('keydown', async (ev) => {
     if (ev.key === 'Enter') {
       ev.preventDefault();
+      const cmd = parseCommand(d.input.value);
+      if (cmd) { clear(); await d.onCommand(cmd); return; }
       const p = parseLine(d.input.value, { defaultTime: d.defaultTime() });
       if (!p.valid) return;
       d.input.disabled = true;

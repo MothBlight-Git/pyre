@@ -191,9 +191,13 @@ function applySettings(s: Settings): void {
 const composer = installComposer({
   input: composerInput,
   chips,
+  cmdChip: $('composer-cmd'),
   defaultTime: () => settings.defaultDueTime,
   onCommit: async (p) => {
     await window.pyre.add({ topic: p.topic, comment: p.comment, due: p.due, source: 'user' });
+  },
+  onCommand: async (c) => {
+    if (c.kind === 'quit') await window.pyre.quit();
   },
 });
 
