@@ -1,0 +1,12 @@
+/* Bundled locally — a portable exe on an offline machine cannot hit Google Fonts,
+   and the type is fixed-px so fallback metrics would drift the layout. */
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 400; font-display: block;
+  src: url('../fonts/ibm-plex-mono-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 500; font-display: block;
+  src: url('../fonts/ibm-plex-mono-latin-500-normal.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 600; font-display: block;
+  src: url('../fonts/ibm-plex-mono-latin-600-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Literata'; font-style: normal; font-weight: 400; font-display: block;
+  src: url('../fonts/literata-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Literata'; font-style: italic; font-weight: 400; font-display: block;
+  src: url('../fonts/literata-latin-400-italic.woff2') format('woff2'); }

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:;">
+<title>Pyre</title>
+<link rel="stylesheet" href="./styles/fonts.css">
+<link rel="stylesheet" href="./styles/burn-system.css">
+<link rel="stylesheet" href="./styles/grid-system.css">
+<link rel="stylesheet" href="./styles/shell.css">
+</head>
+<body>
+  <div class="rail" id="rail" data-dock="right">
+    <div class="rail__drag-strip" aria-hidden="true"></div>
+
+    <div class="composer" id="composer">
+      <input class="composer__input" id="composer-input" type="text" autocomplete="off" spellcheck="false"
+             placeholder="topic / comment / due" aria-label="New note: topic, slash, comment, slash, due">
+      <div class="composer__chips" id="composer-chips" hidden aria-live="polite">
+        <span class="chip" data-role="topic" data-empty>topic</span>
+        <span class="chip" data-role="comment" data-empty>comment</span>
+        <span class="chip" data-role="due" data-empty>due</span>
+      </div>
+      <div class="composer__error" id="write-error" hidden role="alert"></div>
+      <div class="rail__meta" id="rail-meta">
+        <span class="rail__count" id="rail-count"></span>
+        <span class="rail__meta-actions">
+          <button class="meta-btn" id="btn-archive" type="button" title="Done archive">DONE</button>
+          <button class="meta-btn" id="btn-settings" type="button" title="Settings">SETTINGS</button>
+        </span>
+      </div>
+    </div>
+
+    <div class="rail__surface" id="surface">
+      <div class="drop-target" id="drop-target" hidden></div>
+    </div>
+
+    <p class="empty" id="empty" hidden>Nothing on the wall.<br>Type a topic, a slash, and what it's about.</p>
+  </div>
+
+  <button class="flare-pip" id="flare-pip" hidden type="button" aria-label="A burning note is below the fold. Scroll to it.">
+    <span class="flare-pip__dot"></span><span class="flare-pip__count" id="flare-count">1</span>
+  </button>
+
+  <div class="rail__resize" id="rail-resize" title="Resize rail" aria-hidden="true"></div>
+
+  <!-- Overlays: soot sheets inside the same window. -->
+  <section class="sheet" id="sheet-archive" hidden aria-label="Done archive">
+    <header class="sheet__head"><span>DONE · LAST 50</span><button class="meta-btn" data-close type="button">CLOSE</button></header>
+    <div class="sheet__body" id="archive-list"></div>
+  </section>
+
+  <section class="sheet" id="sheet-settings" hidden aria-label="Settings">
+    <header class="sheet__head"><span>SETTINGS</span><button class="meta-btn" data-close type="button">CLOSE</button></header>
+    <div class="sheet__body" id="settings-body"></div>
+  </section>
+
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

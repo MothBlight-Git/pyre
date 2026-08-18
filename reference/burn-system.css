@@ -1,0 +1,329 @@
+/* ==========================================================================
+   PYRE — burn system reference CSS
+   Extracted verbatim from the approved design (Pyre Rail Directions.dc.html).
+   One driver: --burn (a registered <percentage>). Everything below reads it.
+   Chromium/Electron only — relies on @property, mask-composite and calc() in
+   gradient colour stops.
+   ========================================================================== */
+
+@property --burn {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: 0%;
+}
+
+:root {
+  /* paper + ink (achromatic) */
+  --paper-stock:   #FBFAF6;   /* live note */
+  --paper-cool:    #E4E0D8;   /* gone-out note (9A) */
+  --paper-stalled: #EFE9DF;   /* stalled note (9B) */
+  --paper-banked:  #F4F1EA;   /* banked note (9C) */
+  --ink-900:       #191512;   /* body copy on paper */
+  --ink-500:       #5C544C;   /* meta on paper — the ONLY meta ink */
+  --ink-on-soot:   #9A9088;   /* meta on the desktop */
+  --hairline:      rgba(25,21,18,.12);
+
+  /* ignition ramp — the only saturated values in the product */
+  --fire-deep:  rgba(206,72,20,.85);   /* trough just under the front */
+  --fire-mid:   #FFB347;
+  --fire-core:  #FFFBEE;               /* the front itself */
+  --fire-high:  #FFD27A;
+  --fire-blob:  #FFFDF6;               /* white-hot blob cores */
+  --fire-glow:  rgba(255,170,80,.6);   /* bloom / drop-shadow tint */
+
+  /* geometry */
+  --note-size: 176px;   /* square; 160px at 340px rail width */
+  --grid-gap:  20px;    /* keeps bloom + tongues off neighbours */
+  --radius:    3px;
+}
+
+/* --------------------------------------------------------------------------
+   1. NOTE SHELL
+   The wrapper is the coordinate space for every fire layer. All fire layers
+   must be siblings of the card at inset:0 so they share its 176px box.
+   LAYER ORDER IS LOAD-BEARING (see README "Layer order"):
+     backglow → halo → ember line (ring) → tongues → CARD → embers → wash(z 99)
+   -------------------------------------------------------------------------- */
+.note {
+  position: relative;
+  width: var(--note-size);
+}
+
+.note__card {
+  position: relative;
+  aspect-ratio: 1;
+  background: var(--paper-stock);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 2px 0 rgba(0,0,0,.5);           /* cold only */
+}
+
+/* burning notes drop the hard black shadow — it paints a dark strip under the
+   fire — and take a warm bloom instead */
+.note[data-state="burning"]  .note__card { box-shadow: 0 0 32px 6px rgba(255,164,78,.46); }
+.note[data-state="overdue"]  .note__card { box-shadow: 0 0 40px 8px rgba(255,168,84,.52), 0 0 14px 3px rgba(255,232,180,.42); }
+
+/* --------------------------------------------------------------------------
+   2. DISSOLVE — the burnt-away bottom edge
+   11 mask layers composited with intersect: one linear front plus ten
+   overlapping radial bites so no column rests on the straight front.
+   -------------------------------------------------------------------------- */
+.note__card[data-burning] {
+  -webkit-mask-image:
+    linear-gradient(to top, transparent 0 var(--burn), rgba(0,0,0,.3) calc(var(--burn) + 3%), #000 calc(var(--burn) + 7%)),
+    radial-gradient(20% calc(var(--burn) * 1.5) at 3% 100%, transparent 0 24%, rgba(0,0,0,.4) 38%, #000 54%),
+    radial-gradient(26% calc(var(--burn) * 1.5) at 13% 100%, transparent 0 34%, rgba(0,0,0,.4) 48%, #000 64%),
+    radial-gradient(18% calc(var(--burn) * 1.5) at 24% 100%, transparent 0 20%, rgba(0,0,0,.4) 34%, #000 50%),
+    radial-gradient(24% calc(var(--burn) * 1.5) at 34% 100%, transparent 0 38%, rgba(0,0,0,.4) 52%, #000 68%),
+    radial-gradient(28% calc(var(--burn) * 1.5) at 45% 100%, transparent 0 23%, rgba(0,0,0,.4) 37%, #000 53%),
+    radial-gradient(20% calc(var(--burn) * 1.5) at 56% 100%, transparent 0 36%, rgba(0,0,0,.4) 50%, #000 66%),
+    radial-gradient(26% calc(var(--burn) * 1.5) at 67% 100%, transparent 0 21%, rgba(0,0,0,.4) 35%, #000 51%),
+    radial-gradient(22% calc(var(--burn) * 1.5) at 78% 100%, transparent 0 37%, rgba(0,0,0,.4) 51%, #000 67%),
+    radial-gradient(24% calc(var(--burn) * 1.5) at 89% 100%, transparent 0 26%, rgba(0,0,0,.4) 40%, #000 56%),
+    radial-gradient(18% calc(var(--burn) * 1.5) at 98% 100%, transparent 0 32%, rgba(0,0,0,.4) 46%, #000 62%);
+  mask-image:
+    linear-gradient(to top, transparent 0 var(--burn), rgba(0,0,0,.3) calc(var(--burn) + 3%), #000 calc(var(--burn) + 7%)),
+    radial-gradient(20% calc(var(--burn) * 1.5) at 3% 100%, transparent 0 24%, rgba(0,0,0,.4) 38%, #000 54%),
+    radial-gradient(26% calc(var(--burn) * 1.5) at 13% 100%, transparent 0 34%, rgba(0,0,0,.4) 48%, #000 64%),
+    radial-gradient(18% calc(var(--burn) * 1.5) at 24% 100%, transparent 0 20%, rgba(0,0,0,.4) 34%, #000 50%),
+    radial-gradient(24% calc(var(--burn) * 1.5) at 34% 100%, transparent 0 38%, rgba(0,0,0,.4) 52%, #000 68%),
+    radial-gradient(28% calc(var(--burn) * 1.5) at 45% 100%, transparent 0 23%, rgba(0,0,0,.4) 37%, #000 53%),
+    radial-gradient(20% calc(var(--burn) * 1.5) at 56% 100%, transparent 0 36%, rgba(0,0,0,.4) 50%, #000 66%),
+    radial-gradient(26% calc(var(--burn) * 1.5) at 67% 100%, transparent 0 21%, rgba(0,0,0,.4) 35%, #000 51%),
+    radial-gradient(22% calc(var(--burn) * 1.5) at 78% 100%, transparent 0 37%, rgba(0,0,0,.4) 51%, #000 67%),
+    radial-gradient(24% calc(var(--burn) * 1.5) at 89% 100%, transparent 0 26%, rgba(0,0,0,.4) 40%, #000 56%),
+    radial-gradient(18% calc(var(--burn) * 1.5) at 98% 100%, transparent 0 32%, rgba(0,0,0,.4) 46%, #000 62%);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+}
+
+/* --------------------------------------------------------------------------
+   3. EMBER LINE — one white-hot blob per bite on a single row, over a ramp
+   with a deliberately dark trough beneath a near-white front. Sits UNDER the
+   card so it can never occlude the comment; it shows through the removed
+   region and the 7% feather.
+   -------------------------------------------------------------------------- */
+.note__ember-line {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+  pointer-events: none;
+  filter: blur(2.5px) drop-shadow(0 0 16px rgba(255,180,100,.6));
+  background:
+    radial-gradient(16% calc(var(--burn) * 1.05) at 3% calc(100% - var(--burn) + 2%),
+      rgba(255,253,246,0.95) 0%, rgba(255,240,206,0.57) 34%, rgba(255,206,138,0.27) 58%, rgba(255,180,90,0) 82%),
+    radial-gradient(21% calc(var(--burn) * 1.05) at 13% calc(100% - var(--burn) + 2%),
+      rgba(255,253,246,0.8) 0%, rgba(255,240,206,0.48) 34%, rgba(255,206,138,0.22) 58%, rgba(255,180,90,0) 82%),
+    radial-gradient(14% calc(var(--burn) * 1.05) at 24% calc(100% - var(--burn) + 2%),
+      rgba(255,253,246,0.9) 0%, rgba(255,240,206,0.54) 34%, rgba(255,206,138,0.25) 58%, rgba(255,180,90,0) 82%),
+    radial-gradient(19% calc(var(--burn) * 1.05) at 34% calc(100% - var(--burn) + 2%),
+      rgba(255,253,246,0.72) 0%, rgba(255,240,206,0.43) 34%, rgba(255,206,138,0.20) 58%, rgba(255,180,90,0) 82%),
+    radial-gradient(22% calc(var(--burn) * 1.05) at 45% calc(100% - var(--burn) + 2%),
+      rgba(255,253,246,0.95) 0%, rgba(255,240,206,0.57) 34%, rgba(255,206,138,0.27) 58%, rgba(255,180,90,0) 82%),
+    radial-gradient(16% calc(var(--burn) * 1.05) at 56% calc(100% - var(--burn) + 2%),
+      rgba(255,253,246,0.78) 0%, rgba(255,240,206,0.47) 34%, rgba(255,206,138,0.22) 58%, rgba(255,180,90,0) 82%),
+    radial-gradient(21% calc(var(--burn) * 1.05) at 67% calc(100% - var(--burn) + 2%),
+      rgba(255,253,246,0.92) 0%, rgba(255,240,206,0.55) 34%, rgba(255,206,138,0.26) 58%, rgba(255,180,90,0) 82%),
+    radial-gradient(18% calc(var(--burn) * 1.05) at 78% calc(100% - var(--burn) + 2%),
+      rgba(255,253,246,0.75) 0%, rgba(255,240,206,0.45) 34%, rgba(255,206,138,0.21) 58%, rgba(255,180,90,0) 82%),
+    radial-gradient(19% calc(var(--burn) * 1.05) at 89% calc(100% - var(--burn) + 2%),
+      rgba(255,253,246,0.85) 0%, rgba(255,240,206,0.51) 34%, rgba(255,206,138,0.24) 58%, rgba(255,180,90,0) 82%),
+    radial-gradient(14% calc(var(--burn) * 1.05) at 98% calc(100% - var(--burn) + 2%),
+      rgba(255,253,246,0.7) 0%, rgba(255,240,206,0.42) 34%, rgba(255,206,138,0.20) 58%, rgba(255,180,90,0) 82%),
+    linear-gradient(to top,
+      rgba(214,80,24,.42) 0%,
+      rgba(255,120,40,.66) calc(var(--burn) - 12%),
+      var(--fire-deep)     calc(var(--burn) - 6%),
+      var(--fire-mid)      calc(var(--burn) - 2%),
+      var(--fire-core)     calc(var(--burn) + 1%),
+      var(--fire-high)     calc(var(--burn) + 5%),
+      rgba(255,150,60,.52) calc(var(--burn) + 14%),
+      rgba(255,192,124,.28) calc(var(--burn) + 26%),
+      rgba(255,214,150,.09) calc(var(--burn) + 40%),
+      rgba(255,214,150,0)   calc(var(--burn) + 54%));
+}
+
+/* --------------------------------------------------------------------------
+   4. FIRELIGHT WASH — exactly ONE per note, unmasked, on the top layer.
+   Do not also put a copy inside the card: a masked copy fades with the mask
+   and leaves a visible bright band across the feather.
+   -------------------------------------------------------------------------- */
+.note__wash {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+  z-index: 99;
+  pointer-events: none;
+  background: linear-gradient(to top,
+    rgba(255,228,194,.18) 0%,
+    rgba(255,224,184,.24) calc(var(--burn) + 7%),
+    rgba(255,216,164,.30) calc(var(--burn) + 15%),
+    rgba(255,210,150,.22) calc(var(--burn) + 35%),
+    rgba(255,206,138,.12) calc(var(--burn) + 58%),
+    rgba(255,206,138,.05) calc(var(--burn) + 80%),
+    rgba(255,206,138,0)   100%);
+}
+/* cold + due notes (no burn) start warm at the bottom edge */
+.note[data-state="cold"] .note__wash,
+.note[data-state="due"]  .note__wash {
+  background: linear-gradient(to top,
+    rgba(255,216,164,.34) 0%,
+    rgba(255,216,164,.30) 10%,
+    rgba(255,212,156,.24) 26%,
+    rgba(255,208,146,.16) 46%,
+    rgba(255,206,138,.08) 66%,
+    rgba(255,206,138,.03) 84%,
+    rgba(255,206,138,0)  100%);
+}
+/* NEVER let two wash stops land within ~3% of each other: a 0.1 alpha step
+   over 2px reads as a hard bright line. */
+
+/* --------------------------------------------------------------------------
+   5. GLOWS — bottom-anchored halo for the fire, plus an even all-round
+   backglow that pulses with the flash.
+   -------------------------------------------------------------------------- */
+.note__halo {
+  position: absolute;
+  left: -10px; right: -10px; bottom: -12px; height: 52%;
+  border-radius: 12px;
+  filter: blur(9px);
+  pointer-events: none;
+  background: radial-gradient(82% 100% at 50% 100%,
+    rgba(255,192,112,.56) 0%, rgba(255,142,66,.3) 42%,
+    rgba(198,116,15,.14) 70%, rgba(226,78,27,0) 100%);
+}
+.note__backglow {
+  position: absolute;
+  inset: -22px;
+  border-radius: 18px;
+  filter: blur(10px);
+  pointer-events: none;
+  background: radial-gradient(closest-side,
+    rgba(255,196,120,.5) 0%, rgba(255,160,80,.2) 54%, rgba(255,150,70,0) 100%);
+}
+
+/* --------------------------------------------------------------------------
+   6. TONGUES — overdue only. In the ±11px overhang columns, above the card,
+   clear of the type block. Normal blend: screen blend inverts against a
+   transparent Electron window.
+   -------------------------------------------------------------------------- */
+.note__tongues { position: absolute; left: -11px; right: -11px; bottom: 10%; height: 26%; opacity: .72; pointer-events: none; }
+.note__tongue--l { position: absolute; bottom: 0; left: 0;  width: 26%; height: 88%; transform-origin: bottom center; filter: blur(6px);
+  background: radial-gradient(ellipse 54% 60% at 46% 100%, #FFF3CE 0%, #FFA83C 36%, rgba(255,138,61,0) 82%);
+  animation: flA 1.10s ease-in-out infinite; }
+.note__tongue--r { position: absolute; bottom: 0; right: 0; width: 24%; height: 74%; transform-origin: bottom center; filter: blur(6px);
+  background: radial-gradient(ellipse 54% 58% at 54% 100%, #FFF3CE 0%, #FFAE48 40%, rgba(255,138,61,0) 82%);
+  animation: flB 1.43s ease-in-out infinite; }
+
+/* --------------------------------------------------------------------------
+   7. EMBERS — 2–3px dots spawned on the burn line, escaping the note bounds.
+   Cap 8–12 across the whole rail, hottest notes first.
+   -------------------------------------------------------------------------- */
+.ember { position: absolute; border-radius: 50%; pointer-events: none;
+  background: #FFE3A8; box-shadow: 0 0 5px 1px rgba(255,170,80,.75);
+  bottom: calc(var(--burn) + 4%); }
+
+/* --------------------------------------------------------------------------
+   8. MOTION
+   -------------------------------------------------------------------------- */
+@keyframes flA { 0%,100%{transform:scaleY(1) translateX(0)} 30%{transform:scaleY(1.06) translateX(1.5px)} 65%{transform:scaleY(.97) translateX(-1px)} }
+@keyframes flB { 0%,100%{transform:scaleY(1) translateX(0)} 35%{transform:scaleY(.95) translateX(-2px)} 70%{transform:scaleY(1.05) translateX(1px)} }
+@keyframes flC { 0%,100%{transform:scaleY(1) translateX(0)} 40%{transform:scaleY(1.04) translateX(1px)} 75%{transform:scaleY(1) translateX(-1.5px)} }
+
+@keyframes emberA { 0%{transform:translate(0,0) scale(1);opacity:0} 10%{opacity:1} 60%{opacity:.8} 100%{transform:translate(-14px,-78px) scale(.4);opacity:0} }
+@keyframes emberB { 0%{transform:translate(0,0) scale(1);opacity:0} 14%{opacity:.95} 100%{transform:translate(9px,-96px) scale(.35);opacity:0} }
+@keyframes emberC { 0%{transform:translate(0,0) scale(1);opacity:0} 18%{opacity:.9} 100%{transform:translate(-4px,-62px) scale(.5);opacity:0} }
+
+/* due window: warmth layer pulses to full; stock warms on the same beat */
+@keyframes warmFlash    { 0%,66%,100%{opacity:.72} 78%{opacity:1} 88%{opacity:.82} }
+@keyframes stockWarm    { 0%,66%,100%{background-color:#FBFAF6} 78%{background-color:#FDF2E2} 88%{background-color:#FCF6EC} }
+/* burning + overdue: brighter double beat */
+@keyframes warmFlashHot { 0%,52%,100%{opacity:.8} 62%{opacity:1} 70%{opacity:.86} 80%{opacity:1} 90%{opacity:.88} }
+@keyframes stockWarmHot { 0%,52%,100%{background-color:#FBF7F0} 62%{background-color:#FEEBD2} 70%{background-color:#FDF1DF} 80%{background-color:#FEE9CD} 90%{background-color:#FDF2E1} }
+/* backglow breathes with the flash */
+@keyframes ringPulse    { 0%,100%{opacity:.45;transform:scale(1)} 50%{opacity:.85;transform:scale(1.03)} }
+@keyframes ringPulseHot { 0%,100%{opacity:.55;transform:scale(1)} 44%{opacity:1;transform:scale(1.055)} 72%{opacity:.7;transform:scale(1.02)} }
+/* past overdue + banked */
+@keyframes slowShake     { 0%,96.4%,100%{transform:translateX(0)} 97%{transform:translateX(-.6px)} 97.8%{transform:translateX(.6px)} 98.6%{transform:translateX(-.4px)} }
+@keyframes smokeDrift    { 0%{opacity:0;transform:translate(0,0) scale(.9)} 18%{opacity:.5} 100%{opacity:0;transform:translate(12px,-56px) scale(1.5)} }
+@keyframes stallPulse    { 0%,100%{opacity:.5} 50%{opacity:.72} }
+@keyframes bankedBreathe { 0%,100%{opacity:.34} 50%{opacity:.62} }
+/* live demo drivers (documentation only — production sets --burn from heat) */
+@keyframes burnCycle { 0%{--burn:0%} 14%{--burn:2%} 34%{--burn:8%} 58%{--burn:17%} 82%{--burn:26%} 100%{--burn:27%} }
+@keyframes burnCross { 0%,18%{--burn:17%} 62%,100%{--burn:26%} }
+
+.note[data-state="due"]      { --burn: 8%;  }
+.note[data-state="due"]      .note__wash     { animation: warmFlash 6s ease-in-out infinite; }
+.note[data-state="due"]      .note__card     { animation: stockWarm 6s ease-in-out infinite; }
+.note[data-state="due"]      .note__backglow { animation: ringPulse 6s ease-in-out infinite; }
+
+.note[data-state="burning"]  { --burn: 17%; }
+.note[data-state="burning"]  .note__wash     { animation: warmFlashHot 3.4s ease-in-out infinite; }
+.note[data-state="burning"]  .note__card     { animation: stockWarmHot 3.4s ease-in-out infinite; }
+.note[data-state="burning"]  .note__backglow { animation: ringPulseHot 3.4s ease-in-out infinite; }
+
+.note[data-state="overdue"]  { --burn: 26%; }
+.note[data-state="overdue"]  .note__wash     { animation: warmFlashHot 2.6s ease-in-out infinite; }
+.note[data-state="overdue"]  .note__card     { animation: stockWarmHot 2.6s ease-in-out infinite; }
+.note[data-state="overdue"]  .note__backglow { animation: ringPulseHot 2.6s ease-in-out infinite; }
+
+.note[data-state="gone-out"] { --burn: 30%; animation: slowShake 9s linear infinite; }
+.note[data-state="stalled"]  { --burn: 30%; animation: slowShake 9s linear infinite; }
+.note[data-state="banked"]   .note__ember-line,
+.note[data-state="banked"]   .note__backglow { animation: bankedBreathe 5.5s ease-in-out infinite; }
+
+/* transition between states: the tick sets --burn, CSS absorbs the step */
+.note { transition: --burn 2.4s ease-out; }
+/* tier crossing: 600ms sweep + one-shot 1.15x bloom flare settling over 400ms */
+.note[data-crossing] { transition: --burn 600ms cubic-bezier(.4,0,.2,1); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; }
+  .note { transition: none !important; }
+}
+
+/* --------------------------------------------------------------------------
+   9. PAST-OVERDUE AND BANKED SKINS
+   The fire leaves; the veil arrives. No new ink values — the cold reading is
+   carried by the stock, the veil and card opacity.
+   -------------------------------------------------------------------------- */
+.note[data-state="gone-out"] .note__card { background: var(--paper-cool); opacity: .9; box-shadow: 0 1px 0 rgba(0,0,0,.4); }
+.note[data-state="gone-out"] .note__ember-line,
+.note[data-state="gone-out"] .note__halo,
+.note[data-state="gone-out"] .note__backglow { display: none; }
+.note[data-state="gone-out"] .note__wash {
+  background: linear-gradient(to top, rgba(58,50,44,.5) 0%, rgba(58,50,44,.34) 26%,
+    rgba(90,82,74,.2) 44%, rgba(120,112,104,.08) 68%, rgba(120,112,104,0) 100%);
+}
+
+.note[data-state="stalled"] .note__card { background: var(--paper-stalled); box-shadow: 0 1px 0 rgba(0,0,0,.4), 0 0 22px 4px rgba(255,168,84,.2); }
+.note[data-state="stalled"] .note__backglow { animation: stallPulse 7s ease-in-out infinite; opacity: .6; }
+.note[data-state="stalled"] .note__wash {
+  background: linear-gradient(to top, rgba(120,110,100,.34) 0%, rgba(140,128,116,.22) 30%,
+    rgba(160,148,136,.1) 56%, rgba(160,148,136,0) 82%);
+}
+
+.note[data-state="banked"] .note__card { background: var(--paper-banked); box-shadow: 0 1px 0 rgba(0,0,0,.42), 0 0 14px 2px rgba(255,168,84,.14); }
+.note[data-state="banked"] .note__wash {
+  background: linear-gradient(to top, rgba(255,224,184,.16) 0%, rgba(255,216,164,.12) 22%,
+    rgba(255,210,150,.06) 48%, rgba(255,206,138,0) 78%);
+}
+.note[data-state="banked"] .note__halo { opacity: .16; }
+.note__banked-chip {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px; font-weight: 500; letter-spacing: .08em; white-space: nowrap;
+  color: var(--ink-500);
+  border: 1px solid rgba(92,84,76,.42); border-radius: 2px; padding: 1px 4px;
+}
+
+/* smoke wisp — 9A every 9s, 9C every 12s */
+.note__smoke {
+  position: absolute; left: 26%; right: 20%; top: -40px; height: 50px;
+  filter: blur(9px); pointer-events: none;
+  background: radial-gradient(48% 68% at 58% 100%, rgba(154,144,136,.44) 0%,
+    rgba(154,144,136,.14) 48%, rgba(154,144,136,0) 100%);
+  animation: smokeDrift 9s ease-out infinite;
+}
+.note[data-state="banked"] .note__smoke { animation-duration: 12s; opacity: .7; }

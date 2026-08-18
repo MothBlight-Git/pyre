@@ -1,0 +1,212 @@
+/* ==========================================================================
+   PYRE — grid, drag and placement.
+
+   ADDITIVE. Loads AFTER burn-system.css and overrides nothing in it. If you
+   find yourself editing burn-system.css to make something here work, the
+   something here is wrong — that file is an approved verbatim extraction.
+
+   Copy to: src/renderer/styles/grid-system.css
+   ========================================================================== */
+
+@property --warmth {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+
+:root {
+  --gutter: 16px;
+  --grid-gap: 20px;          /* keeps bloom + tongues off neighbours */
+  /* --note-size and --cols are set inline on .rail by grid.gridMetrics() */
+  --pitch: calc(var(--note-size) + var(--grid-gap));
+  --lift-shadow: 0 10px 24px rgba(0,0,0,.55);
+}
+
+/* --------------------------------------------------------------------------
+   1. RAIL
+   The window paints nothing. No background, no border, no header. Notes are
+   absolutely positioned rather than laid out by CSS grid: we already compute
+   exact cells in grid.ts, and absolute coords make FLIP and drag trivial.
+   -------------------------------------------------------------------------- */
+.rail {
+  position: relative;
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: visible;        /* tongues and bloom overhang by ±11px */
+  background: none;
+  scrollbar-width: none;
+}
+.rail::-webkit-scrollbar { width: 0; }
+
+.rail__drag-strip {
+  height: 28px;
+  -webkit-app-region: drag;   /* the ONLY draggable chrome */
+}
+
+.rail__surface {
+  position: relative;
+  padding: 0 var(--gutter);
+}
+
+/* --------------------------------------------------------------------------
+   2. CELL POSITIONING
+   Each note carries --col and --row inline. Changing them animates the move,
+   which is the FLIP reorder from the design doc (260ms, cubic-bezier(.4,0,.2,1)).
+   -------------------------------------------------------------------------- */
+.note {
+  position: absolute;
+  width: var(--note-size);
+  transform: translate3d(calc(var(--col) * var(--pitch)), calc(var(--row) * var(--pitch)), 0);
+  transition: transform 260ms cubic-bezier(.4,0,.2,1);
+  will-change: transform;
+}
+
+/* A note entering for the first time: design-handoff "Note enters".
+   Position is NOT animated on entry — only the drop. */
+@keyframes noteEnter {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes noteEnterInner {
+  from { transform: translateY(-10px) rotate(-1.8deg) scale(.97); }
+  to   { transform: none; }
+}
+.note[data-entering]            { animation: noteEnter 320ms cubic-bezier(.22,1,.36,1) both; transition: none; }
+.note[data-entering] .note__card{ animation: noteEnterInner 320ms cubic-bezier(.22,1,.36,1) both; }
+
+/* --------------------------------------------------------------------------
+   3. WARMTH — the ambient pre-fuse band.
+   Only touches cold/warming. Once the fuse is lit the wash is owned by the
+   warmFlash keyframes and must not be fought.
+   -------------------------------------------------------------------------- */
+.note[data-state="cold"]    .note__wash,
+.note[data-state="warming"] .note__wash { opacity: var(--warmth); }
+.note[data-state="warming"] .note__halo { opacity: calc(var(--warmth) * .5); }
+.note[data-state="cold"]    .note__halo { opacity: 0; }
+
+/* --------------------------------------------------------------------------
+   4. DRAG
+   Pointer Events only. HTML5 drag-and-drop has no usable drag image on a
+   transparent Electron window and cannot be cancelled cleanly mid-gesture.
+   -------------------------------------------------------------------------- */
+.note[data-dragging] {
+  transition: none;            /* the pointer owns the transform now */
+  z-index: 400;
+  cursor: grabbing;
+}
+.note[data-dragging] .note__card {
+  transform: scale(1.04) rotate(1.5deg);
+  box-shadow: var(--lift-shadow);
+  transition: transform 120ms ease-out, box-shadow 120ms ease-out;
+}
+/* A burning note keeps its bloom while lifted — the hard shadow would paint a
+   dark strip under the fire (design-handoff Pitfall 4). */
+.note[data-dragging][data-state="burning"]  .note__card,
+.note[data-dragging][data-state="critical"] .note__card,
+.note[data-dragging][data-state="overdue"]  .note__card {
+  box-shadow: 0 0 40px 8px rgba(255,168,84,.52), 0 10px 24px rgba(0,0,0,.4);
+}
+
+.note[data-settling] { transition: transform 200ms cubic-bezier(.22,1,.36,1); }
+
+/* Drop target. A bone hairline rectangle, never a filled block — a filled
+   block would read as a new note and, if tinted, would break colour discipline. */
+.drop-target {
+  position: absolute;
+  width: var(--note-size);
+  height: var(--note-size);
+  border: 1px dashed rgba(232,226,214,.42);
+  border-radius: var(--radius);
+  pointer-events: none;
+  z-index: 300;
+  transform: translate3d(calc(var(--col) * var(--pitch)), calc(var(--row) * var(--pitch)), 0);
+  transition: transform 140ms cubic-bezier(.4,0,.2,1), opacity 120ms;
+}
+.drop-target[hidden] { opacity: 0; }
+
+/* --------------------------------------------------------------------------
+   5. PLACEMENT MARKERS
+   Both are structural greys. No chroma is spent — see Colour discipline.
+   -------------------------------------------------------------------------- */
+/* Pinned by the user: a 2px tick on the RIGHT edge. */
+.note[data-placement="manual"] .note__card::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0; right: 0;
+  width: 2px;
+  background: rgba(92,84,76,.5);
+  pointer-events: none;
+}
+/* Created by an agent: a 2px tick on the LEFT edge (design-handoff). */
+.note[data-source="agent"] .note__card::before {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  width: 2px;
+  background: #3A322C;
+  pointer-events: none;
+}
+
+/* Release-to-auto affordance, shown on hover beside the other note actions. */
+.note__release { display: none; }
+.note[data-placement="manual"]:hover .note__release { display: inline-flex; }
+
+/* --------------------------------------------------------------------------
+   6. FLARE PIP
+   A pinned note that catches fire below the fold must not be able to hide.
+   We never move it — we point at it.
+   -------------------------------------------------------------------------- */
+.flare-pip {
+  position: fixed;
+  right: 10px; bottom: 12px;
+  z-index: 500;
+  display: flex; align-items: center; gap: 5px;
+  padding: 4px 7px;
+  border-radius: 2px;
+  background: rgba(20,17,15,.82);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9.5px; font-weight: 600; letter-spacing: .1em;
+  color: var(--ink-on-soot);
+  cursor: pointer;
+}
+.flare-pip__dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: #FFE3A8;
+  box-shadow: 0 0 6px 1px rgba(255,170,80,.8);
+  animation: pipBreathe 2.6s ease-in-out infinite;
+}
+@keyframes pipBreathe { 0%,100% { opacity: .55 } 50% { opacity: 1 } }
+.flare-pip[hidden] { display: none; }
+
+/* --------------------------------------------------------------------------
+   7. REDUCED MOTION
+   burn-system.css already kills all animation. Here we also kill the position
+   transitions, so reordering is instant rather than absent.
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .note, .drop-target, .note[data-settling] { transition: none !important; }
+  .note[data-dragging] .note__card { transform: none; }
+}
+
+/* --------------------------------------------------------------------------
+   8. NEW STATE BINDINGS
+   The 2h fuse introduces two states burn-system.css has no rules for:
+   `warming` (due set, fuse not lit) and `critical` (final approach).
+   These follow the established pattern rather than inventing new treatment.
+
+   NOTE: burn-system.css binds a literal --burn per state
+   (e.g. [data-state="burning"] { --burn: 17% }). The renderer sets --burn
+   INLINE from heat.ts every tick, and an inline custom property beats an
+   attribute-selector rule, so the continuous value always wins. The static
+   bindings survive only as a fallback if the tick ever stalls. Do not delete
+   them and do not add !important.
+   -------------------------------------------------------------------------- */
+.note[data-state="warming"] { --burn: 0%; }
+
+/* critical = the last ~12 minutes. Overdue's heartbeat, but no tongues yet:
+   the paper is not gone, so nothing should be licking past its edges. */
+.note[data-state="critical"] .note__wash     { animation: warmFlashHot 2.6s ease-in-out infinite; }
+.note[data-state="critical"] .note__card     { animation: stockWarmHot 2.6s ease-in-out infinite; }
+.note[data-state="critical"] .note__backglow { animation: ringPulseHot 2.6s ease-in-out infinite; }
+.note[data-state="critical"] .note__card     { box-shadow: 0 0 40px 8px rgba(255,168,84,.52); }
+.note[data-state="critical"] .note__tongues  { display: none; }

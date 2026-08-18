@@ -1,0 +1,24 @@
+appId: com.pyre.notes
+productName: Pyre
+directories:
+  output: release
+files:
+  - dist/**/*
+  - package.json
+  - "!**/*.map"
+asar: true
+win:
+  target: [portable, nsis, zip]
+  icon: build/icon.png
+portable:
+  artifactName: Pyre.exe
+  unpackDirName: false        # extract to temp, not a fixed path
+nsis:
+  artifactName: Pyre-Setup-${version}.exe
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+# zip = the portable FOLDER build: unzip anywhere and run Pyre.exe. Unlike the
+# single-file portable stub, this Pyre.exe is the real binary, so
+# `Pyre.exe --mcp` serves stdio MCP. Create a `pyre.portable` marker (or a
+# `pyre-data` folder) beside it to keep the data there.

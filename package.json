@@ -1,0 +1,34 @@
+{
+  "name": "pyre",
+  "version": "0.1.0",
+  "description": "Burning desktop notes",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.renderer.json",
+    "build:main": "tsc -p tsconfig.json",
+    "build:renderer": "vite build",
+    "build": "npm run build:main && npm run build:renderer",
+    "start": "npm run build && electron .",
+    "dev": "npm run build:main && vite build --watch",
+    "dist": "npm run build && npm run build:icon && electron-builder --win",
+    "mcp": "npm run build:main && electron . --mcp",
+    "build:icon": "node scripts/make-icon.js"
+  },
+  "keywords": [],
+  "author": "Pyre",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.1",
+    "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^4.4.3"
+  },
+  "private": true
+}

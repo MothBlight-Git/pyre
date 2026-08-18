@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pyre — burn system reference</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Literata:ital,wght@0,400;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="burn-system.css">
+<style>
+  /* page chrome for this reference only — NOT part of the product */
+  body { margin:0; background:#0C0A09; color:#9A9088; font-family:'IBM Plex Mono',monospace; padding:48px; }
+  h1 { font-size:11px; letter-spacing:.14em; text-transform:uppercase; font-weight:600; color:#E8E2D6; margin:0 0 6px; }
+  p.lede { font-family:Literata,Georgia,serif; font-size:14px; line-height:1.5; max-width:620px; margin:0 0 40px; }
+  .row { display:flex; gap:40px; flex-wrap:wrap; }
+  .cell { display:flex; flex-direction:column; gap:12px; width:176px; }
+  .cell > figcaption, .cell > .label { font-size:10px; letter-spacing:.12em; text-transform:uppercase; white-space:nowrap; }
+
+  /* product styles that live in the app's own note component */
+  .note__subject { position:relative; padding:9px 11px; border-bottom:1px solid var(--hairline);
+    display:flex; align-items:center; justify-content:space-between; }
+  .note__topic { font-family:'IBM Plex Mono',monospace; font-size:10.5px; font-weight:500; letter-spacing:.09em; color:var(--ink-500); }
+  .note__due { font-family:'IBM Plex Mono',monospace; font-size:10.5px; font-weight:500; font-variant-numeric:tabular-nums; color:var(--ink-500); }
+  .note__comment { position:relative; flex:1; padding:9px 11px; font-family:Literata,Georgia,serif;
+    font-size:13.5px; line-height:1.42; color:var(--ink-900); }
+  .entry { width:340px; border:1px solid #3A322C; border-radius:3px; padding:10px 12px;
+    font-family:Literata,Georgia,serif; font-size:14px; line-height:1.4; color:#9A9088; margin-bottom:32px; }
+</style>
+</head>
+<body>
+  <h1>Pyre · burn system reference</h1>
+  <p class="lede">One note per state, all driven by <code>--burn</code> from burn-system.css.
+    Open in Chrome (or your Electron renderer) and compare your build against this.
+    The dark page here stands in for the desktop; the product paints no background at all.</p>
+
+  <div class="entry">topic / comment / due</div>
+
+  <div class="row">
+    <figure class="cell" style="margin:0">
+      <figcaption>cold · no due</figcaption>
+      <div class="note" data-state="cold">
+        <div class="note__backglow"></div>
+        
+        
+        
+        <div class="note__card">
+          <div class="note__subject">
+            <span class="note__topic">READING</span>
+            <span class="note__due"></span>
+          </div>
+          <div class="note__comment">Look up ISO 19650 naming</div>
+        </div>
+        <div class="note__wash"></div>
+      </div>
+    </figure>
+    <figure class="cell" style="margin:0">
+      <figcaption>due · 8h</figcaption>
+      <div class="note" data-state="due">
+        <div class="note__backglow"></div>
+        <div class="note__halo"></div>
+        <div class="note__ember-line"></div>
+        
+        <div class="note__card" data-burning>
+          <div class="note__subject">
+            <span class="note__topic">INVOICE</span>
+            <span class="note__due">8h</span>
+          </div>
+          <div class="note__comment">Submit August hours</div>
+        </div>
+        <div class="note__wash"></div>
+      </div>
+    </figure>
+    <figure class="cell" style="margin:0">
+      <figcaption>burning · 1h</figcaption>
+      <div class="note" data-state="burning">
+        <div class="note__backglow"></div>
+        <div class="note__halo"></div>
+        <div class="note__ember-line"></div>
+        
+        <div class="note__card" data-burning>
+          <div class="note__subject">
+            <span class="note__topic">INVOICE</span>
+            <span class="note__due">1h</span>
+          </div>
+          <div class="note__comment">Submit August hours</div>
+        </div>
+        <div class="note__wash"></div>
+      </div>
+    </figure>
+    <figure class="cell" style="margin:0">
+      <figcaption>overdue · -2d</figcaption>
+      <div class="note" data-state="overdue">
+        <div class="note__backglow"></div>
+        <div class="note__halo"></div>
+        <div class="note__ember-line"></div>
+        <div class="note__tongues"><div class="note__tongue--l"></div><div class="note__tongue--r"></div></div>
+        <div class="note__card" data-burning>
+          <div class="note__subject">
+            <span class="note__topic">WINWATER</span>
+            <span class="note__due">-2d</span>
+          </div>
+          <div class="note__comment">Send BEP to Powell</div>
+        </div>
+        <div class="note__wash"></div>
+      </div>
+    </figure>
+    <figure class="cell" style="margin:0">
+      <figcaption>banked · snoozed</figcaption>
+      <div class="note" data-state="banked">
+        <div class="note__smoke"></div>
+        <div class="note__backglow"></div>
+        <div class="note__halo"></div>
+        <div class="note__ember-line"></div>
+        
+        <div class="note__card" data-burning>
+          <div class="note__subject">
+            <span class="note__topic">INVOICE</span>
+            <span class="note__due">1h</span>
+            <span class="note__banked-chip">BANKED</span>
+          </div>
+          <div class="note__comment">Submit August hours</div>
+        </div>
+        <div class="note__wash"></div>
+      </div>
+    </figure>
+    <figure class="cell" style="margin:0">
+      <figcaption>gone out · -21d</figcaption>
+      <div class="note" data-state="gone-out">
+        <div class="note__smoke"></div>
+        <div class="note__backglow"></div>
+        <div class="note__halo"></div>
+        <div class="note__ember-line"></div>
+        
+        <div class="note__card" data-burning>
+          <div class="note__subject">
+            <span class="note__topic">WINWATER</span>
+            <span class="note__due">-21d</span>
+          </div>
+          <div class="note__comment">Send BEP to Powell</div>
+        </div>
+        <div class="note__wash"></div>
+      </div>
+    </figure>
+  </div>
+</body>
+</html>
