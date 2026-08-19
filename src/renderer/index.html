@@ -42,11 +42,16 @@
       </div>
     </section>
 
-    <div class="rail__surface" id="surface">
-      <div class="drop-target" id="drop-target" hidden></div>
-    </div>
+    <!-- Only this scrolls. The composer and the lane stay put; notes fade out
+         under them via a mask, because the window is transparent and there is
+         no background to fade to. -->
+    <div class="rail__scroll" id="scroll">
+      <div class="rail__surface" id="surface">
+        <div class="drop-target" id="drop-target" hidden></div>
+      </div>
 
-    <p class="empty" id="empty" hidden>Nothing on the wall.<br>Type a topic, a slash, and what it's about.</p>
+      <p class="empty" id="empty" hidden>Nothing on the wall.<br>Type a topic, a slash, and what it's about.</p>
+    </div>
   </div>
 
   <button class="flare-pip" id="flare-pip" hidden type="button" aria-label="A burning note is below the fold. Scroll to it.">

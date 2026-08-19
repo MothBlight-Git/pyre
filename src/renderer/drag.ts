@@ -21,6 +21,8 @@ const SURFACE_PAD_TOP = 8;
 
 export interface DragDeps {
   rail: HTMLElement;
+  /** The element that scrolls — .rail__scroll. */
+  scroller: HTMLElement;
   surface: HTMLElement;
   dropTarget: HTMLElement;
   grid: GridView;
@@ -81,9 +83,9 @@ export function installDrag(d: DragDeps): { active: () => boolean } {
     place(s.root, s.lastClientX - s.grabX - o.x, s.lastClientY - s.grabY - o.y);
 
     // Edge auto-scroll.
-    const rr = d.rail.getBoundingClientRect();
-    if (s.lastClientY < rr.top + EDGE_PX && d.rail.scrollTop > 0) d.rail.scrollTop -= EDGE_STEP;
-    else if (s.lastClientY > rr.bottom - EDGE_PX) d.rail.scrollTop += EDGE_STEP;
+    const rr = d.scroller.getBoundingClientRect();
+    if (s.lastClientY < rr.top + EDGE_PX && d.scroller.scrollTop > 0) d.scroller.scrollTop -= EDGE_STEP;
+    else if (s.lastClientY > rr.bottom - EDGE_PX) d.scroller.scrollTop += EDGE_STEP;
 
     const t = resolveTarget();
     if (t.col !== s.target.col || t.row !== s.target.row) {

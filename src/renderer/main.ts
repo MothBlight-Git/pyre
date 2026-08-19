@@ -15,6 +15,7 @@ import type { NoteAction } from './note';
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const rail = $('rail');
+const scroller = $('scroll');
 const surface = $('surface');
 const dropTarget = $('drop-target');
 const pip = $('flare-pip');
@@ -34,7 +35,7 @@ let tickTimer: number | null = null;
 
 // ---------------------------------------------------------------- grid + actions
 
-const grid = new GridView(rail, surface, pip, pipCount, { onAction }, emptyEl, countEl);
+const grid = new GridView(rail, scroller, surface, pip, pipCount, { onAction }, emptyEl, countEl);
 
 function onAction(id: string, action: NoteAction, ev: Event): void {
   switch (action) {
@@ -232,7 +233,7 @@ window.addEventListener('keydown', (ev) => {
 // ---------------------------------------------------------------- drag
 
 installDrag({
-  rail, surface, dropTarget, grid,
+  rail, scroller, surface, dropTarget, grid,
   onCommit: async (id, slot, displaced) => {
     if (displaced.length) await window.pyre.correct(displaced);
     await window.pyre.move(id, slot.col, slot.row);

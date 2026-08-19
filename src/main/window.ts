@@ -71,8 +71,33 @@ export function createRailWindow(s: Settings, preload: string): BrowserWindow {
   return win;
 }
 
+/**
+ * Re-dock the window: full width/height/position from the chosen display.
+ * Use when the dock side, display or reservation changes.
+ */
 export function applyBounds(win: BrowserWindow, s: Settings): void {
   win.setBounds(railBounds(s));
+}
+
+/**
+ * Width-only change: grow from the anchored edge and leave everything else
+ * alone.
+ *
+ * The rail can be moved with its drag strip, so re-docking on every resize
+ * teleports a window the user deliberately placed. Instead we hold the edge the
+ * dock side implies — the right edge when docked right — and move the other
+ * one, then clamp back inside the work area so it can never end up off-screen.
+ */
+export function applyWidth(win: BrowserWindow, s: Settings): void {
+  const width = Math.max(MIN_RAIL, Math.min(MAX_RAIL, s.railWidth));
+  const b = win.getBounds();
+  const wa = pickDisplay(s.displayId).workArea;
+
+  let x = s.dockSide === 'left' ? b.x : b.x + b.width - width;
+  // Never let either edge leave the work area.
+  x = Math.max(wa.x, Math.min(x, wa.x + wa.width - width));
+
+  win.setBounds({ x, y: b.y, width, height: b.height });
 }
 
 export function rendererEntry(): { file: string } | { url: string } {

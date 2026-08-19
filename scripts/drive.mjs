@@ -17,7 +17,7 @@ fs.mkdirSync(dir, { recursive: true });
 const [type, a, b] = process.argv.slice(2);
 const out = path.join(dir, `out-${Date.now()}.${type === 'shot' ? 'png' : 'json'}`);
 let cmd;
-if (type === 'shot') cmd = { type, out: a ? path.resolve(a) : out };
+if (type === 'shot') cmd = { type, out: a ? path.resolve(a) : out, backdrop: b || '#0C0A09' };
 else if (type === 'js') cmd = { type, code: a, out };
 else if (type === 'mouse' || type === 'key') cmd = { type, events: JSON.parse(a), out };
 else if (type === 'bounds') cmd = { type, out };

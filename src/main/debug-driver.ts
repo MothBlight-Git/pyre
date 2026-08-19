@@ -32,8 +32,26 @@ export function installDebugDriver(dir: string, getWindow: () => BrowserWindow |
     try {
       if (!win) throw new Error('no window');
       if (cmd.type === 'shot') {
-        const img = await win.webContents.capturePage();
-        fs.writeFileSync(cmd.out, img.toPNG());
+        // The window is transparent, so a bare capture is invisible. Paint a
+        // temporary backdrop, shoot, then REMOVE it — leaving it behind is what
+        // made the app look like it randomly had a background.
+        const backdrop = String(cmd.backdrop ?? '#0C0A09');
+        // Wait for the backdrop to actually paint. Capturing in the same tick
+        // snapshots a still-transparent frame, and the fire's blurred glow
+        // layers composite against nothing — which looks like lurid orange
+        // artefacts and reads as a rendering bug that is not there.
+        await win.webContents.executeJavaScript(
+          `document.documentElement.dataset.shotBackdrop='1';
+           document.body.style.background=${JSON.stringify(backdrop)};
+           new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));`, true);
+        await new Promise((r) => setTimeout(r, 120));
+        try {
+          const img = await win.webContents.capturePage();
+          fs.writeFileSync(cmd.out, img.toPNG());
+        } finally {
+          await win.webContents.executeJavaScript(
+            "document.body.style.background='';delete document.documentElement.dataset.shotBackdrop;1", true);
+        }
       } else if (cmd.type === 'js') {
         const r = await win.webContents.executeJavaScript(cmd.code, true);
         done(r);

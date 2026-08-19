@@ -32,6 +32,8 @@ export class GridView {
 
   constructor(
     private rail: HTMLElement,
+    /** The element that actually scrolls — .rail__scroll, not .rail. */
+    private scroller: HTMLElement,
     private surface: HTMLElement,
     private pip: HTMLElement,
     private pipCount: HTMLElement,
@@ -40,7 +42,7 @@ export class GridView {
     private countEl: HTMLElement,
   ) {
     pip.addEventListener('click', () => this.scrollToHottestHidden());
-    rail.addEventListener('scroll', () => this.updatePip(), { passive: true });
+    scroller.addEventListener('scroll', () => this.updatePip(), { passive: true });
   }
 
   // ---------------------------------------------------------------- metrics
@@ -217,8 +219,8 @@ export class GridView {
 
   private visibleRowRange(): { start: number; end: number } {
     const surfaceTop = this.surface.offsetTop; // composer height above the grid
-    const scrollTop = this.rail.scrollTop;
-    const viewH = this.rail.clientHeight;
+    const scrollTop = this.scroller.scrollTop;
+    const viewH = this.scroller.clientHeight;
     const pitch = this.metrics.pitch;
     const start = Math.max(0, Math.floor((scrollTop - surfaceTop) / pitch));
     const end = Math.max(start, Math.ceil((scrollTop + viewH - surfaceTop - this.metrics.noteSize * 0.5) / pitch));
@@ -258,7 +260,7 @@ export class GridView {
     }
     if (best) {
       const y = this.surface.offsetTop + best.slot.row * this.metrics.pitch;
-      this.rail.scrollTo({ top: Math.max(0, y - 8), behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+      this.scroller.scrollTo({ top: Math.max(0, y - 8), behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
       best.refs.root.focus({ preventScroll: true });
     }
   }

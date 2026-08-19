@@ -45,8 +45,35 @@ html[data-mock] .sheet { left: calc(100% - var(--mock-rail, 340px)); }
 
 /* --------------------------------------------------------------------------
    RAIL
+
+   The composer, the lane and the meta row are fixed; only the notes scroll.
+   grid-system.css puts overflow on .rail — override it here (this file loads
+   after) and hand scrolling to .rail__scroll instead.
    -------------------------------------------------------------------------- */
-.rail { position: relative; }
+.rail {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+.rail__drag-strip, .composer, .lane { flex: 0 0 auto; }
+
+.rail__scroll {
+  flex: 1 1 auto;
+  min-height: 0;              /* or a flex child refuses to shrink and never scrolls */
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  position: relative;
+  /* Notes dissolve as they pass under the bar. The window paints nothing, so
+     this has to be an alpha mask — there is no colour to fade into. The 20px
+     ramp matches the grid gap so a note never half-vanishes mid-row. */
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 20px);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 20px);
+}
+.rail__scroll::-webkit-scrollbar { width: 0; }
+
 .rail__surface {
   /* height is set inline from rows × pitch so the rail scrolls */
   padding-top: 8px;             /* room for the backglow above row 0 */

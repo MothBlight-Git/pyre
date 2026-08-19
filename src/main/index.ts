@@ -54,7 +54,7 @@ function runApp(): void {
   const { app, BrowserWindow, globalShortcut, Tray, Menu, nativeImage, screen } = electron;
   const { resolvePaths } = require('./paths') as typeof import('./paths');
   const { Store } = require('./store') as typeof import('./store');
-  const { createRailWindow, applyBounds, railBoundsOnMonitor, rendererEntry } = require('./window') as typeof import('./window');
+  const { createRailWindow, applyBounds, applyWidth, railBoundsOnMonitor, rendererEntry } = require('./window') as typeof import('./window');
   const { registerIpc, wireStoreEvents } = require('./ipc') as typeof import('./ipc');
   const { emberIcon } = require('./icon') as typeof import('./icon');
   const { startMcpHttp } = require('./mcp-http') as typeof import('./mcp-http');
@@ -140,7 +140,11 @@ function runApp(): void {
       app.setLoginItemSettings({ openAtLogin: s.startWithSystem, path: process.execPath });
     }
     if (s.mcpHttpPort !== prev.mcpHttpPort) void restartMcpHttp(s.mcpHttpPort);
-    applyBounds(win, s);
+    // A width-only change grows from the anchored edge; anything that changes
+    // where the rail belongs re-docks it properly.
+    const redocks = s.dockSide !== prev.dockSide || s.displayId !== prev.displayId
+      || s.reserveScreenSpace !== prev.reserveScreenSpace;
+    if (redocks) applyBounds(win, s); else applyWidth(win, s);
     applyReserve(s);
   };
 

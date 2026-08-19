@@ -7,18 +7,19 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { Store } from '../src/main/store';
-import { buildTools, systemPrompt, describe as describeError } from '../src/main/agent';
+import { systemPrompt, describe as describeError } from '../src/main/agent';
+import { buildToolDefs } from '../src/main/tool-defs';
 import { APIConnectionError, AuthenticationError, RateLimitError } from '@anthropic-ai/sdk';
 
 let dir: string;
 let store: Store;
 const at = (min: number) => new Date(Date.now() + min * 60000).toISOString();
 
-/** The SDK wraps each tool; reach the underlying implementation by name. */
+/** Tools are provider-neutral: name, description, schema, run(args). */
 const tool = (name: string) => {
-  const t = buildTools(store).find((x: any) => x.name === name);
+  const t = buildToolDefs(store).find((x) => x.name === name);
   if (!t) throw new Error(`no tool ${name}`);
-  return (args: any) => (t as any).run(args, {} as any);
+  return (args: Record<string, unknown>) => t.run(args);
 };
 
 beforeEach(() => {
@@ -30,7 +31,7 @@ afterEach(() => { try { fs.rmSync(dir, { recursive: true, force: true }); } catc
 
 describe('assistant tools', () => {
   it('exposes exactly the tools the system prompt promises', () => {
-    const names = buildTools(store).map((t: any) => t.name).sort();
+    const names = buildToolDefs(store).map((t) => t.name).sort();
     expect(names).toEqual([
       'add_note', 'bank_note', 'delete_note', 'get_grid', 'list_notes',
       'move_note', 'parse_line', 'release_note', 'snuff_note', 'update_note',
