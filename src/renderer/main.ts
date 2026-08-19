@@ -270,6 +270,7 @@ function wireBridge(): void {
   window.pyre.onWriteOk(() => { writeError.hidden = true; });
   window.pyre.onFocusComposer(() => { sheets.close(); composer.focus(); });
   window.pyre.onOpenSettings(() => void sheets.toggleSettings());
+  window.pyre.onAssistantBusy((busy) => lane.setThinking(busy));
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) runTick(); });
 

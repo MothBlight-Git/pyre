@@ -28,6 +28,8 @@ export const DEFAULT_SETTINGS: Settings = {
   startWithSystem: false,
   displayId: null,
   mcpHttpPort: 41777,
+  assistantEnabled: true,
+  assistantModel: 'claude-opus-5',
 };
 
 export const WRITE_ERROR_COPY =
@@ -431,5 +433,7 @@ export function sanitizeSettings(s: Settings): Settings {
   out.displayId = typeof out.displayId === 'number' ? out.displayId : null;
   const port = Math.round(Number(out.mcpHttpPort));
   out.mcpHttpPort = Number.isFinite(port) && port >= 0 && port <= 65535 ? port : DEFAULT_SETTINGS.mcpHttpPort;
+  out.assistantEnabled = out.assistantEnabled !== false;
+  if (typeof out.assistantModel !== 'string' || !out.assistantModel.trim()) out.assistantModel = DEFAULT_SETTINGS.assistantModel;
   return out;
 }

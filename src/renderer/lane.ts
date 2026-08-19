@@ -24,6 +24,8 @@ export class Lane {
   private open = false;
   /** True between sending and the agent's next reply — drives the breathing hint. */
   private awaiting = false;
+  /** True while the built-in assistant is actually mid-call. */
+  private thinking = false;
 
   constructor(private d: LaneDeps) {
     d.toggle.addEventListener('click', () => this.setOpen(!this.open));
@@ -49,6 +51,13 @@ export class Lane {
         else void window.pyre.markMessagesRead();
       }
     }
+    this.render();
+  }
+
+  /** The built-in assistant is mid-call. */
+  setThinking(v: boolean): void {
+    this.thinking = v;
+    if (v) { this.awaiting = true; this.setOpen(true); }
     this.render();
   }
 
@@ -106,7 +115,10 @@ export class Lane {
     }
 
     const pendingFromUser = list.some((m) => m.role === 'user' && !m.read);
-    if (this.awaiting || pendingFromUser) {
+    if (this.thinking) {
+      this.d.hint.textContent = 'THINKING…';
+      this.d.hint.classList.add('lane__pending');
+    } else if (this.awaiting || pendingFromUser) {
       this.d.hint.textContent = 'WAITING FOR THE AGENT TO LOOK';
       this.d.hint.classList.add('lane__pending');
     } else {

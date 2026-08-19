@@ -4,7 +4,14 @@
  * bridge with the same contract so the whole UI can be exercised and visually
  * checked against note-example.html. Never used in the packaged app.
  */
-import type { Note, Settings, PyreBridge, AppInfo, Placement, Message } from '../shared/types';
+import type { Note, Settings, PyreBridge, AppInfo, Placement, Message, KeyStatus } from '../shared/types';
+
+const mockKey = (configured: boolean): KeyStatus => ({
+  configured,
+  source: configured ? 'stored' : 'none',
+  encryptionAvailable: true,
+  hint: configured ? '••••1234' : null,
+});
 
 export function installMockBridge(): void {
   if (window.pyre) return;
@@ -33,12 +40,13 @@ export function installMockBridge(): void {
   let settings: Settings = {
     dockSide: 'right', railWidth: +(q.get('w') ?? 340), alwaysOnTop: true, reserveScreenSpace: false,
     defaultDueTime: '17:00', globalHotkey: 'Control+Alt+N', startWithSystem: false, displayId: null, mcpHttpPort: 41777,
+    assistantEnabled: true, assistantModel: 'claude-opus-5',
   };
   let messages: Message[] = q.has('msgs') ? [
     { id: 'm_1', role: 'user', text: 'move winwater to friday please', created: new Date(now - 6 * 60000).toISOString(), read: true },
     { id: 'm_2', role: 'agent', text: 'Moved WINWATER to Fri 21 Aug 17:00 and left it on auto placement.', created: new Date(now - 5 * 60000).toISOString(), read: false },
   ] : [];
-  const listeners = { change: new Set<(n: Note[]) => void>(), settings: new Set<(s: Settings) => void>(), err: new Set<(m: string) => void>(), ok: new Set<() => void>(), focus: new Set<() => void>(), open: new Set<() => void>(), msgs: new Set<(m: Message[]) => void>() };
+  const listeners = { change: new Set<(n: Note[]) => void>(), settings: new Set<(s: Settings) => void>(), err: new Set<(m: string) => void>(), ok: new Set<() => void>(), focus: new Set<() => void>(), open: new Set<() => void>(), msgs: new Set<(m: Message[]) => void>(), busy: new Set<(b: boolean) => void>() };
   const emit = () => { const copy = notes.map((n) => ({ ...n })); for (const cb of listeners.change) cb(copy); };
   const emitMsgs = () => { const copy = messages.map((m) => ({ ...m })); for (const cb of listeners.msgs) cb(copy); };
   const find = (id: string) => { const n = notes.find((x) => x.id === id); if (!n) throw new Error('no note ' + id); return n; };
@@ -100,6 +108,10 @@ export function installMockBridge(): void {
     onSettings: on(listeners.settings),
     onFocusComposer: on(listeners.focus),
     onOpenSettings: on(listeners.open),
+    keyStatus: async () => mockKey(q.has('key')),
+    setKey: async () => mockKey(true),
+    clearKey: async () => mockKey(false),
+    onAssistantBusy: on(listeners.busy),
   };
   window.pyre = bridge;
   // Debug hooks for the browser console.

@@ -59,6 +59,8 @@ function runApp(): void {
   const { emberIcon } = require('./icon') as typeof import('./icon');
   const { startMcpHttp } = require('./mcp-http') as typeof import('./mcp-http');
   const appbar = require('./appbar') as typeof import('./appbar');
+  const { Agent } = require('./agent') as typeof import('./agent');
+  const secrets = require('./secrets') as typeof import('./secrets');
 
   const gotLock = app.requestSingleInstanceLock();
   if (!gotLock) {
@@ -73,6 +75,26 @@ function runApp(): void {
   let tray: InstanceType<typeof Tray> | null = null;
   let hotkey = '';
   let mcpHttp: import('./mcp-http').McpHttp | null = null;
+
+  // The built-in assistant. Reads the key lazily so Settings changes take effect
+  // without a restart; does nothing at all when no key is configured.
+  const agent = new Agent(store, () => secrets.getKey(paths.dir, log), log);
+  const send = (channel: string, ...args: unknown[]) => {
+    if (win && !win.isDestroyed()) win.webContents.send(channel, ...args);
+  };
+  /**
+   * Answer any unread user message in the talk lane. Fires for messages typed in
+   * the bar AND for ones written straight into notes.json, since both land as a
+   * store 'messages' event. Agent replies are role 'agent', so this cannot loop.
+   */
+  const maybeRespond = () => {
+    const s = store.settings();
+    if (!s.assistantEnabled || agent.isBusy()) return;
+    if (!store.messages().some((x) => x.role === 'user' && !x.read)) return;
+    if (!secrets.getKey(paths.dir, log)) return; // no key: an external MCP agent owns the lane
+    send('agent:busy', true);
+    void agent.respond(s.assistantModel).finally(() => send('agent:busy', false));
+  };
 
   const restartMcpHttp = async (port: number) => {
     if (mcpHttp) { mcpHttp.close(); mcpHttp = null; }
@@ -144,7 +166,12 @@ function runApp(): void {
     if ('url' in entry) win.loadURL(entry.url); else win.loadFile(entry.file);
     win.on('closed', () => { win = null; });
 
-    registerIpc({ store, getWindow: () => win, applySettings, mcpHttpUrl: () => mcpHttp?.url ?? null });
+    registerIpc({
+      store, getWindow: () => win, applySettings,
+      mcpHttpUrl: () => mcpHttp?.url ?? null,
+      onKeyChanged: () => maybeRespond(),
+    });
+    store.on('messages', () => maybeRespond());
     wireStoreEvents(store, () => win);
     registerHotkey(store.settings().globalHotkey);
     void restartMcpHttp(store.settings().mcpHttpPort);

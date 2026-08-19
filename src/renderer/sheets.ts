@@ -80,7 +80,7 @@ export class Sheets {
   }
 
   async renderSettings(): Promise<void> {
-    const [s, info] = await Promise.all([window.pyre.settings(), window.pyre.info()]);
+    const [s, info, key] = await Promise.all([window.pyre.settings(), window.pyre.info(), window.pyre.keyStatus()]);
     const body = this.settingsBody;
     body.replaceChildren();
 
@@ -190,6 +190,74 @@ export class Sheets {
 
       const rsNote = h('p', 'set__note', 'Reserve screen space registers the rail as a Windows AppBar, so maximised windows stop at its edge instead of hiding behind it.');
       body.appendChild(rsNote);
+
+      // ---- Built-in assistant (API key)
+      {
+        const blk = h('div', 'set__block');
+        blk.appendChild(h('span', 'set__label', 'Assistant'));
+        blk.appendChild(h('p', 'set__note',
+          'With an Anthropic API key, Pyre answers "> …" lines itself and can add, move, bank and snuff notes for you. Without one, those lines wait for an external agent over MCP.'));
+
+        const keyRow = h('div', 'set');
+        keyRow.appendChild(h('span', 'set__label', 'API key'));
+        const kc = h('span', 'set__ctl');
+        const keyInput = h('input');
+        keyInput.type = 'password';
+        keyInput.size = 18;
+        keyInput.autocomplete = 'off';
+        keyInput.spellcheck = false;
+        keyInput.placeholder = key.configured ? (key.hint ?? 'set') : 'sk-ant-…';
+        keyInput.disabled = key.source === 'env';
+        const save = h('button', 'meta-btn', 'SAVE');
+        save.type = 'button';
+        save.disabled = key.source === 'env';
+        save.addEventListener('click', async () => {
+          const v = keyInput.value.trim();
+          if (!v) return;
+          save.textContent = 'SAVING…';
+          await window.pyre.setKey(v);
+          keyInput.value = '';
+          await this.renderSettings();
+        });
+        kc.append(keyInput, save);
+        if (key.configured && key.source === 'stored') {
+          const clear = h('button', 'meta-btn', 'CLEAR');
+          clear.type = 'button';
+          clear.addEventListener('click', async () => { await window.pyre.clearKey(); await this.renderSettings(); });
+          kc.appendChild(clear);
+        }
+        keyRow.appendChild(kc);
+        blk.appendChild(keyRow);
+
+        if (key.source === 'env') {
+          blk.appendChild(h('p', 'set__note', 'Using ANTHROPIC_API_KEY from the environment. Unset it to store a key here instead.'));
+        } else if (key.configured) {
+          blk.appendChild(h('p', 'set__note', `Key ${key.hint} stored, encrypted for your Windows account. It is never written to notes.json or settings.json, and never sent to the window.`));
+        } else if (!key.encryptionAvailable) {
+          blk.appendChild(h('p', 'set__note is-warn', 'This system offers no secure storage, so Pyre will not save a key. Set ANTHROPIC_API_KEY in the environment instead.'));
+        } else {
+          blk.appendChild(h('p', 'set__note', 'Get a key at console.anthropic.com. It is encrypted with your Windows account and stored beside your notes.'));
+        }
+
+        const enabled = h('div', 'set');
+        enabled.appendChild(h('span', 'set__label', 'Answer > lines'));
+        const ec = h('span', 'set__ctl');
+        ec.appendChild(toggle(s.assistantEnabled, (v) => void set({ assistantEnabled: v }), !key.configured));
+        enabled.appendChild(ec);
+        blk.appendChild(enabled);
+
+        const modelRow = h('div', 'set');
+        modelRow.appendChild(h('span', 'set__label', 'Model'));
+        const mc = h('span', 'set__ctl');
+        const model = h('input');
+        model.type = 'text'; model.value = s.assistantModel; model.size = 16; model.spellcheck = false;
+        model.addEventListener('change', () => { if (model.value.trim()) void set({ assistantModel: model.value.trim() }); });
+        mc.appendChild(model);
+        modelRow.appendChild(mc);
+        blk.appendChild(modelRow);
+
+        body.appendChild(blk);
+      }
 
       const blk = h('div', 'set__block');
       blk.appendChild(h('span', 'set__label', 'AI access'));

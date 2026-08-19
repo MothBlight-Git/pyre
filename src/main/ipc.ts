@@ -5,6 +5,7 @@ import { app, ipcMain, shell, BrowserWindow, screen } from 'electron';
 import type { Store } from './store';
 import type { Settings, AppInfo } from '../shared/types';
 import { mcpConfigSnippets, detectLauncher } from './mcp-config';
+import * as secrets from './secrets';
 
 export interface IpcHost {
   store: Store;
@@ -12,6 +13,8 @@ export interface IpcHost {
   applySettings: (s: Settings, prev: Settings) => void;
   /** Live local MCP endpoint URL, or null. */
   mcpHttpUrl: () => string | null;
+  /** Called after the key changes, so the assistant picks it up. */
+  onKeyChanged: () => void;
 }
 
 export function registerIpc(host: IpcHost): void {
@@ -35,6 +38,11 @@ export function registerIpc(host: IpcHost): void {
   h('msg:say', (text: string) => store.say('user', text));
   h('msg:markRead', () => { store.markRead('agent'); });
   h('msg:clear', () => { store.clearMessages(); });
+
+  // The renderer can set, clear and check the key — never read it back.
+  h('key:status', () => secrets.status(store.paths.dir));
+  h('key:set', (key: string) => { const s = secrets.setKey(store.paths.dir, key); host.onKeyChanged(); return s; });
+  h('key:clear', () => { const s = secrets.clearKey(store.paths.dir); host.onKeyChanged(); return s; });
 
   h('settings:get', () => store.settings());
   h('settings:set', (patch: Partial<Settings>) => {

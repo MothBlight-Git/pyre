@@ -79,6 +79,10 @@ export interface Settings {
   displayId: number | null;
   /** Local MCP endpoint http://127.0.0.1:<port>/mcp served by the running app. 0 = off. */
   mcpHttpPort: number;
+  /** Answer `> …` lines with the built-in assistant when an API key is configured. */
+  assistantEnabled: boolean;
+  /** Model the built-in assistant uses. */
+  assistantModel: string;
 }
 
 /** Everything the renderer can ask the main process to do. */
@@ -99,6 +103,13 @@ export interface PyreApi {
 }
 
 /** Where the data lives, for the settings sheet and README. */
+export interface KeyStatus {
+  configured: boolean;
+  source: 'stored' | 'env' | 'none';
+  encryptionAvailable: boolean;
+  hint: string | null;
+}
+
 export interface AppInfo {
   version: string;
   dataMode: 'env' | 'portable' | 'installed';
@@ -137,6 +148,12 @@ export interface PyreBridge extends PyreApi {
   onFocusComposer(cb: () => void): () => void;
   /** Tray → Settings… */
   onOpenSettings(cb: () => void): () => void;
+  /** API key: the renderer may set, clear and check — never read the key back. */
+  keyStatus(): Promise<KeyStatus>;
+  setKey(key: string): Promise<KeyStatus>;
+  clearKey(): Promise<KeyStatus>;
+  /** True while the assistant is mid-answer. */
+  onAssistantBusy(cb: (busy: boolean) => void): () => void;
 }
 
 declare global {

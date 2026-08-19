@@ -15,7 +15,7 @@ import { layout, gridMetrics } from '../shared/grid';
 import { parseLine, formatDue } from '../shared/parse';
 import type { Note } from '../shared/types';
 
-export const PYRE_MCP_VERSION = '0.2.0';
+export const PYRE_MCP_VERSION = '0.3.0';
 
 /**
  * @param fresh called before every tool: re-read the file if another process

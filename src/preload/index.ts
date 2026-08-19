@@ -36,6 +36,10 @@ const bridge: PyreBridge = {
   onSettings: on('settings:changed'),
   onFocusComposer: on('app:focusComposer'),
   onOpenSettings: on('app:openSettings'),
+  keyStatus: () => ipcRenderer.invoke('key:status'),
+  setKey: (key) => ipcRenderer.invoke('key:set', key),
+  clearKey: () => ipcRenderer.invoke('key:clear'),
+  onAssistantBusy: on('agent:busy'),
 };
 
 contextBridge.exposeInMainWorld('pyre', bridge);
