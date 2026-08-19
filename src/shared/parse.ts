@@ -88,15 +88,26 @@ export function parseLine(line: string, opts: ParseOptions = {}): ParsedLine {
   if (n === 2) {
     comment = segs[1];
   } else if (n >= 3) {
-    const last = segs[n - 1];
-    const parsed = last ? parseDue(last, opts) : null;
-    if (parsed) {
-      due = parsed.toISOString();
-      dueText = last;
-      comment = segs.slice(1, n - 1).join(' / ');
-    } else {
-      comment = segs.slice(1).join(' / ').replace(/\s*\/\s*$/, '');
+    // The due may itself contain slashes — "8/21", "8/21/2026" — and we already
+    // split the line on "/", so the date is spread across the last 2 or 3
+    // segments. Try the shortest tail first and grow: "21" does not parse,
+    // "8/21" does. Anything that is not a date stays part of the comment, so a
+    // comment like "3/4 cup flour" is untouched (the date patterns are anchored).
+    let taken = 0;
+    for (let k = 1; k <= Math.min(3, n - 2); k++) {
+      const tail = segs.slice(n - k).join('/').trim();
+      if (!tail) continue;
+      const parsed = parseDue(tail, opts);
+      if (parsed) {
+        due = parsed.toISOString();
+        dueText = tail;
+        taken = k;
+        break;
+      }
     }
+    comment = taken
+      ? segs.slice(1, n - taken).join(' / ')
+      : segs.slice(1).join(' / ').replace(/\s*\/\s*$/, '');
   }
 
   return {
@@ -273,8 +284,11 @@ export function parseDue(text: string, opts: ParseOptions = {}): Date | null {
 
   // "21 aug" · "aug 21" · "aug 21 2026" · "21 august"
   {
-    const m1 = /^(\d{1,2})\s+([a-z]+)(?:\s+(\d{4}))?$/.exec(rest);
-    const m2 = /^([a-z]+)\s+(\d{1,2})(?:,?\s+(\d{4}))?$/.exec(rest);
+    // The space is optional — people type "aug27" and "27aug" as readily as
+    // "aug 27". Relative offsets ("3d", "4h") are matched earlier, so a bare
+    // number-then-letters string never reaches here.
+    const m1 = /^(\d{1,2})\s*([a-z]+)(?:\s+(\d{4}))?$/.exec(rest);
+    const m2 = /^([a-z]+)\s*(\d{1,2})(?:,?\s+(\d{4}))?$/.exec(rest);
     const m = m1 ?? m2;
     if (m) {
       const day = +(m1 ? m1[1] : m2![2]);

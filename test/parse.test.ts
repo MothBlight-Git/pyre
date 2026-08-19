@@ -140,3 +140,29 @@ describe('talk lane grammar', () => {
     expect(parseMessage('> quit')).toBe('quit');
   });
 });
+
+describe('dates that contain the separator', () => {
+  // The line is split on "/" before the date is read, so a slashed date lands
+  // across several segments. Regression: these silently became comments.
+  it('reads a slashed date as the due, not as comment text', () => {
+    expect(parseLine('test / text / 8/27', opts)).toMatchObject({ comment: 'text', due: local(2026, 8, 27) });
+    expect(parseLine('winwater / send bep / 8/21', opts)).toMatchObject({ comment: 'send bep', due: local(2026, 8, 21) });
+    expect(parseLine('a / b / 8/21/2026', opts)).toMatchObject({ comment: 'b', due: local(2026, 8, 21) });
+    expect(parseLine('a / b / 8/21 3pm', opts)).toMatchObject({ comment: 'b', due: local(2026, 8, 21, 15) });
+  });
+  it('leaves a slashed non-date in the comment', () => {
+    expect(parseLine('recipe / 3/4 cup flour', opts)).toMatchObject({ comment: '3 / 4 cup flour', due: null });
+    expect(parseLine('a / ratio 3/4 / and more', opts).due).toBeNull();
+    expect(parseLine('a / b / c/d', opts)).toMatchObject({ due: null });
+  });
+  it('still prefers the shortest tail that parses', () => {
+    // "fri" alone is a date; the "/" before it must not be swallowed.
+    expect(parseLine('a / b / c / fri', opts)).toMatchObject({ comment: 'b / c', due: local(2026, 8, 21) });
+  });
+  it('accepts a month name with or without a space', () => {
+    expect(parseDue('aug27', opts)?.toISOString()).toBe(local(2026, 8, 27));
+    expect(parseDue('27aug', opts)?.toISOString()).toBe(local(2026, 8, 27));
+    expect(parseDue('aug 27', opts)?.toISOString()).toBe(local(2026, 8, 27));
+    expect(parseDue('august', opts)).toBeNull();  // a bare month is not a date
+  });
+});
