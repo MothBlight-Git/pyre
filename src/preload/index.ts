@@ -36,9 +36,10 @@ const bridge: PyreBridge = {
   onSettings: on('settings:changed'),
   onFocusComposer: on('app:focusComposer'),
   onOpenSettings: on('app:openSettings'),
-  keyStatus: () => ipcRenderer.invoke('key:status'),
-  setKey: (key) => ipcRenderer.invoke('key:set', key),
-  clearKey: () => ipcRenderer.invoke('key:clear'),
+  keyStatus: (provider) => ipcRenderer.invoke('key:status', provider),
+  setKey: (provider, key) => ipcRenderer.invoke('key:set', provider, key),
+  clearKey: (provider) => ipcRenderer.invoke('key:clear', provider),
+  providers: () => ipcRenderer.invoke('app:providers'),
   onAssistantBusy: on('agent:busy'),
 };
 

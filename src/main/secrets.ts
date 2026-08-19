@@ -1,14 +1,14 @@
 /**
- * API key storage.
+ * API key storage — one encrypted blob holding a key per provider.
  *
- * The key is encrypted with Electron's safeStorage, which on Windows wraps
- * DPAPI — the ciphertext is bound to the current user account, so copying
- * `credentials.bin` to another machine or another user yields nothing. It is
- * deliberately NOT in settings.json: that file travels with a portable install
- * and is the file people paste into issues.
+ * Encrypted with Electron's safeStorage, which wraps DPAPI on Windows: the
+ * ciphertext is bound to the current user account, so copying credentials.bin
+ * to another machine or another user yields nothing. Deliberately NOT in
+ * settings.json — that file travels with a portable install and is the one
+ * people paste into issues.
  *
- * The plaintext key never leaves the main process. The renderer can ask whether
- * one is configured and can set or clear it, but can never read it back.
+ * The plaintext never leaves the main process. The renderer can set, clear and
+ * ask whether a key exists; it can never read one back.
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -16,84 +16,109 @@ import { safeStorage } from 'electron';
 
 const FILE = 'credentials.bin';
 
+/** Env fallbacks, checked per provider. Never written to disk. */
+const ENV_VARS: Record<string, string[]> = {
+  anthropic: ['ANTHROPIC_API_KEY'],
+  gemini: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
+  openai: ['OPENAI_API_KEY'],
+  openrouter: ['OPENROUTER_API_KEY'],
+  ollama: [],
+  custom: ['PYRE_API_KEY'],
+};
+
 export interface KeyStatus {
-  /** A key is available from either the encrypted file or the environment. */
   configured: boolean;
-  /** Where it came from. `env` wins and is never written to disk. */
   source: 'stored' | 'env' | 'none';
-  /** False when the OS refused to provide encryption (rare; Linux w/o keyring). */
   encryptionAvailable: boolean;
-  /** Last 4 characters, for "is this the key I think it is?". Never the whole key. */
+  /** Last 4 characters only, so you can tell which key it is. Never the whole key. */
   hint: string | null;
 }
 
-function file(dir: string): string {
-  return path.join(dir, FILE);
+const file = (dir: string) => path.join(dir, FILE);
+
+function fromEnv(provider: string): string | null {
+  for (const name of ENV_VARS[provider] ?? []) {
+    const v = process.env[name];
+    if (v && v.trim()) return v.trim();
+  }
+  return null;
 }
 
-/** ANTHROPIC_API_KEY wins if set — the standard escape hatch, and never persisted. */
-function fromEnv(): string | null {
-  const v = process.env.ANTHROPIC_API_KEY;
-  return v && v.trim() ? v.trim() : null;
-}
-
-export function getKey(dir: string, log: (m: string) => void = () => {}): string | null {
-  const env = fromEnv();
-  if (env) return env;
+function readAll(dir: string, log: (m: string) => void): Record<string, string> {
   const f = file(dir);
-  if (!fs.existsSync(f)) return null;
+  if (!fs.existsSync(f)) return {};
   try {
-    const buf = fs.readFileSync(f);
     if (!safeStorage.isEncryptionAvailable()) {
-      log('secrets: OS encryption unavailable, cannot read stored key');
-      return null;
+      log('secrets: OS encryption unavailable, cannot read stored keys');
+      return {};
     }
-    const key = safeStorage.decryptString(buf).trim();
-    return key || null;
+    const raw = safeStorage.decryptString(fs.readFileSync(f)).trim();
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    // v0.3 stored a bare key string for Anthropic; keep those working.
+    if (typeof parsed === 'string') return { anthropic: parsed };
+    return parsed && typeof parsed === 'object' ? parsed : {};
   } catch (e) {
-    // Wrong user account, corrupted file, or a different machine.
-    log(`secrets: could not decrypt stored key (${(e as Error).message})`);
-    return null;
+    // Wrong user account, corrupted file, or a pre-JSON single key.
+    try {
+      const legacy = safeStorage.decryptString(fs.readFileSync(f)).trim();
+      if (legacy && !legacy.startsWith('{')) return { anthropic: legacy };
+    } catch { /* fall through */ }
+    log(`secrets: could not read stored keys (${(e as Error).message})`);
+    return {};
   }
 }
 
-export function setKey(dir: string, key: string, log: (m: string) => void = () => {}): KeyStatus {
-  const trimmed = key.trim();
-  if (!trimmed) return clearKey(dir, log);
+function writeAll(dir: string, map: Record<string, string>, log: (m: string) => void): boolean {
   if (!safeStorage.isEncryptionAvailable()) {
-    // Refuse rather than silently writing plaintext.
-    log('secrets: refusing to store key — OS encryption unavailable');
-    return status(dir, log);
+    log('secrets: refusing to store — OS encryption unavailable');
+    return false;
   }
-  fs.mkdirSync(dir, { recursive: true });
-  const enc = safeStorage.encryptString(trimmed);
-  const tmp = file(dir) + '.tmp';
-  fs.writeFileSync(tmp, enc, { mode: 0o600 });
-  fs.renameSync(tmp, file(dir));
-  try { fs.chmodSync(file(dir), 0o600); } catch { /* best effort on Windows */ }
-  return status(dir, log);
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    const enc = safeStorage.encryptString(JSON.stringify(map));
+    const tmp = file(dir) + '.tmp';
+    fs.writeFileSync(tmp, enc, { mode: 0o600 });
+    fs.renameSync(tmp, file(dir));
+    try { fs.chmodSync(file(dir), 0o600); } catch { /* best effort on Windows */ }
+    return true;
+  } catch (e) {
+    log(`secrets: write failed (${(e as Error).message})`);
+    return false;
+  }
 }
 
-export function clearKey(dir: string, log: (m: string) => void = () => {}): KeyStatus {
-  try { if (fs.existsSync(file(dir))) fs.unlinkSync(file(dir)); }
-  catch (e) { log(`secrets: could not remove key file (${(e as Error).message})`); }
-  return status(dir, log);
+export function getKey(dir: string, provider: string, log: (m: string) => void = () => {}): string | null {
+  const env = fromEnv(provider);
+  if (env) return env;
+  const k = readAll(dir, log)[provider];
+  return k && k.trim() ? k.trim() : null;
 }
 
-export function status(dir: string, log: (m: string) => void = () => {}): KeyStatus {
+export function setKey(dir: string, provider: string, key: string, log: (m: string) => void = () => {}): KeyStatus {
+  const trimmed = key.trim();
+  const map = readAll(dir, log);
+  if (trimmed) map[provider] = trimmed; else delete map[provider];
+  writeAll(dir, map, log);
+  return status(dir, provider, log);
+}
+
+export function clearKey(dir: string, provider: string, log: (m: string) => void = () => {}): KeyStatus {
+  return setKey(dir, provider, '', log);
+}
+
+export function status(dir: string, provider: string, log: (m: string) => void = () => {}): KeyStatus {
   const encryptionAvailable = (() => {
     try { return safeStorage.isEncryptionAvailable(); } catch { return false; }
   })();
-  if (fromEnv()) {
-    const k = fromEnv()!;
-    return { configured: true, source: 'env', encryptionAvailable, hint: tail(k) };
-  }
-  const k = getKey(dir, log);
+  const env = fromEnv(provider);
+  if (env) return { configured: true, source: 'env', encryptionAvailable, hint: tail(env) };
+  const k = readAll(dir, log)[provider];
   return {
-    configured: !!k,
-    source: k ? 'stored' : 'none',
+    configured: !!(k && k.trim()),
+    source: k && k.trim() ? 'stored' : 'none',
     encryptionAvailable,
-    hint: k ? tail(k) : null,
+    hint: k && k.trim() ? tail(k) : null,
   };
 }
 

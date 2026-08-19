@@ -78,7 +78,18 @@ function runApp(): void {
 
   // The built-in assistant. Reads the key lazily so Settings changes take effect
   // without a restart; does nothing at all when no key is configured.
-  const agent = new Agent(store, () => secrets.getKey(paths.dir, log), log);
+  const { preset } = require('./providers') as typeof import('./providers');
+  const agentConfig = (): import('./agent').AgentConfig => {
+    const s = store.settings();
+    const p = preset(s.assistantProvider);
+    return {
+      providerId: p.id,
+      model: s.assistantModel || p.defaultModel,
+      baseUrl: s.assistantBaseUrl || p.baseUrl,
+      apiKey: secrets.getKey(paths.dir, p.id, log),
+    };
+  };
+  const agent = new Agent(store, agentConfig, log);
   const send = (channel: string, ...args: unknown[]) => {
     if (win && !win.isDestroyed()) win.webContents.send(channel, ...args);
   };
@@ -91,9 +102,11 @@ function runApp(): void {
     const s = store.settings();
     if (!s.assistantEnabled || agent.isBusy()) return;
     if (!store.messages().some((x) => x.role === 'user' && !x.read)) return;
-    if (!secrets.getKey(paths.dir, log)) return; // no key: an external MCP agent owns the lane
+    const cfg = agentConfig();
+    // No key on a provider that needs one: an external MCP agent owns the lane.
+    if (preset(cfg.providerId).needsKey && !cfg.apiKey) return;
     send('agent:busy', true);
-    void agent.respond(s.assistantModel).finally(() => send('agent:busy', false));
+    void agent.respond().finally(() => send('agent:busy', false));
   };
 
   const restartMcpHttp = async (port: number) => {

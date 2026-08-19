@@ -80,7 +80,9 @@ export class Sheets {
   }
 
   async renderSettings(): Promise<void> {
-    const [s, info, key] = await Promise.all([window.pyre.settings(), window.pyre.info(), window.pyre.keyStatus()]);
+    const [s, info, key, providers] = await Promise.all([
+      window.pyre.settings(), window.pyre.info(), window.pyre.keyStatus(), window.pyre.providers(),
+    ]);
     const body = this.settingsBody;
     body.replaceChildren();
 
@@ -191,70 +193,113 @@ export class Sheets {
       const rsNote = h('p', 'set__note', 'Reserve screen space registers the rail as a Windows AppBar, so maximised windows stop at its edge instead of hiding behind it.');
       body.appendChild(rsNote);
 
-      // ---- Built-in assistant (API key)
+      // ---- Built-in assistant (provider + key)
       {
         const blk = h('div', 'set__block');
         blk.appendChild(h('span', 'set__label', 'Assistant'));
         blk.appendChild(h('p', 'set__note',
-          'With an Anthropic API key, Pyre answers "> …" lines itself and can add, move, bank and snuff notes for you. Without one, those lines wait for an external agent over MCP.'));
+          'With a provider configured, Pyre answers "> …" lines itself and can add, move, bank and snuff notes. Without one, those lines wait for an external agent over MCP.'));
 
-        const keyRow = h('div', 'set');
-        keyRow.appendChild(h('span', 'set__label', 'API key'));
-        const kc = h('span', 'set__ctl');
-        const keyInput = h('input');
-        keyInput.type = 'password';
-        keyInput.size = 18;
-        keyInput.autocomplete = 'off';
-        keyInput.spellcheck = false;
-        keyInput.placeholder = key.configured ? (key.hint ?? 'set') : 'sk-ant-…';
-        keyInput.disabled = key.source === 'env';
-        const save = h('button', 'meta-btn', 'SAVE');
-        save.type = 'button';
-        save.disabled = key.source === 'env';
-        save.addEventListener('click', async () => {
-          const v = keyInput.value.trim();
-          if (!v) return;
-          save.textContent = 'SAVING…';
-          await window.pyre.setKey(v);
-          keyInput.value = '';
+        const cur = providers.find((x) => x.id === s.assistantProvider) ?? providers[0];
+
+        // Provider
+        const provRow = h('div', 'set');
+        provRow.appendChild(h('span', 'set__label', 'Provider'));
+        const pc = h('span', 'set__ctl');
+        const sel = h('select');
+        for (const prov of providers) {
+          const o = h('option', undefined, prov.label);
+          o.value = prov.id;
+          if (prov.id === cur.id) o.selected = true;
+          sel.appendChild(o);
+        }
+        sel.addEventListener('change', async () => {
+          const next = providers.find((x) => x.id === sel.value)!;
+          // Switching provider swaps in that provider's default model and clears
+          // the base URL, otherwise you inherit a model name the new one rejects.
+          await set({ assistantProvider: next.id, assistantModel: next.defaultModel, assistantBaseUrl: '' });
           await this.renderSettings();
         });
-        kc.append(keyInput, save);
-        if (key.configured && key.source === 'stored') {
-          const clear = h('button', 'meta-btn', 'CLEAR');
-          clear.type = 'button';
-          clear.addEventListener('click', async () => { await window.pyre.clearKey(); await this.renderSettings(); });
-          kc.appendChild(clear);
+        pc.appendChild(sel);
+        provRow.appendChild(pc);
+        blk.appendChild(provRow);
+
+        // Key — hidden for providers that need none (a local model)
+        if (cur.needsKey || key.configured) {
+          const keyRow = h('div', 'set');
+          keyRow.appendChild(h('span', 'set__label', 'API key'));
+          const kc = h('span', 'set__ctl');
+          const keyInput = h('input');
+          keyInput.type = 'password';
+          keyInput.size = 14;
+          keyInput.autocomplete = 'off';
+          keyInput.spellcheck = false;
+          keyInput.placeholder = key.configured ? (key.hint ?? 'set') : 'paste key';
+          keyInput.disabled = key.source === 'env';
+          const save = h('button', 'meta-btn', 'SAVE');
+          save.type = 'button';
+          save.disabled = key.source === 'env';
+          save.addEventListener('click', async () => {
+            const v = keyInput.value.trim();
+            if (!v) return;
+            save.textContent = 'SAVING…';
+            await window.pyre.setKey(cur.id, v);
+            keyInput.value = '';
+            await this.renderSettings();
+          });
+          kc.append(keyInput, save);
+          if (key.configured && key.source === 'stored') {
+            const clear = h('button', 'meta-btn', 'CLEAR');
+            clear.type = 'button';
+            clear.addEventListener('click', async () => { await window.pyre.clearKey(cur.id); await this.renderSettings(); });
+            kc.appendChild(clear);
+          }
+          keyRow.appendChild(kc);
+          blk.appendChild(keyRow);
         }
-        keyRow.appendChild(kc);
-        blk.appendChild(keyRow);
 
         if (key.source === 'env') {
-          blk.appendChild(h('p', 'set__note', 'Using ANTHROPIC_API_KEY from the environment. Unset it to store a key here instead.'));
+          blk.appendChild(h('p', 'set__note', 'Using a key from the environment. Unset that variable to store one here instead.'));
         } else if (key.configured) {
-          blk.appendChild(h('p', 'set__note', `Key ${key.hint} stored, encrypted for your Windows account. It is never written to notes.json or settings.json, and never sent to the window.`));
-        } else if (!key.encryptionAvailable) {
-          blk.appendChild(h('p', 'set__note is-warn', 'This system offers no secure storage, so Pyre will not save a key. Set ANTHROPIC_API_KEY in the environment instead.'));
+          blk.appendChild(h('p', 'set__note', `Key ${key.hint} stored, encrypted for your Windows account. Never written to notes.json or settings.json, and never sent to the window.`));
+        } else if (cur.needsKey && !key.encryptionAvailable) {
+          blk.appendChild(h('p', 'set__note is-warn', 'This system offers no secure storage, so Pyre will not save a key. Use an environment variable instead.'));
         } else {
-          blk.appendChild(h('p', 'set__note', 'Get a key at console.anthropic.com. It is encrypted with your Windows account and stored beside your notes.'));
+          blk.appendChild(h('p', 'set__note', cur.hint));
         }
 
-        const enabled = h('div', 'set');
-        enabled.appendChild(h('span', 'set__label', 'Answer > lines'));
-        const ec = h('span', 'set__ctl');
-        ec.appendChild(toggle(s.assistantEnabled, (v) => void set({ assistantEnabled: v }), !key.configured));
-        enabled.appendChild(ec);
-        blk.appendChild(enabled);
-
+        // Model
         const modelRow = h('div', 'set');
         modelRow.appendChild(h('span', 'set__label', 'Model'));
         const mc = h('span', 'set__ctl');
         const model = h('input');
         model.type = 'text'; model.value = s.assistantModel; model.size = 16; model.spellcheck = false;
-        model.addEventListener('change', () => { if (model.value.trim()) void set({ assistantModel: model.value.trim() }); });
+        model.placeholder = cur.defaultModel;
+        model.addEventListener('change', () => void set({ assistantModel: model.value.trim() || cur.defaultModel }));
         mc.appendChild(model);
         modelRow.appendChild(mc);
         blk.appendChild(modelRow);
+
+        // Base URL — only meaningful for OpenAI-shaped endpoints
+        if (cur.kind === 'openai') {
+          const urlRow = h('div', 'set');
+          urlRow.appendChild(h('span', 'set__label', 'Base URL'));
+          const uc = h('span', 'set__ctl');
+          const url = h('input');
+          url.type = 'text'; url.value = s.assistantBaseUrl; url.size = 16; url.spellcheck = false;
+          url.placeholder = cur.baseUrl ?? 'https://…/v1';
+          url.addEventListener('change', () => void set({ assistantBaseUrl: url.value.trim() }));
+          uc.appendChild(url);
+          urlRow.appendChild(uc);
+          blk.appendChild(urlRow);
+        }
+
+        const enabled = h('div', 'set');
+        enabled.appendChild(h('span', 'set__label', 'Answer > lines'));
+        const ec = h('span', 'set__ctl');
+        ec.appendChild(toggle(s.assistantEnabled, (v) => void set({ assistantEnabled: v }), cur.needsKey && !key.configured));
+        enabled.appendChild(ec);
+        blk.appendChild(enabled);
 
         body.appendChild(blk);
       }

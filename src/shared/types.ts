@@ -81,8 +81,12 @@ export interface Settings {
   mcpHttpPort: number;
   /** Answer `> …` lines with the built-in assistant when an API key is configured. */
   assistantEnabled: boolean;
+  /** Which provider preset answers: anthropic | gemini | openai | openrouter | ollama | custom. */
+  assistantProvider: string;
   /** Model the built-in assistant uses. */
   assistantModel: string;
+  /** Overrides the preset's base URL. Required for `custom`. */
+  assistantBaseUrl: string;
 }
 
 /** Everything the renderer can ask the main process to do. */
@@ -149,9 +153,11 @@ export interface PyreBridge extends PyreApi {
   /** Tray → Settings… */
   onOpenSettings(cb: () => void): () => void;
   /** API key: the renderer may set, clear and check — never read the key back. */
-  keyStatus(): Promise<KeyStatus>;
-  setKey(key: string): Promise<KeyStatus>;
-  clearKey(): Promise<KeyStatus>;
+  keyStatus(provider?: string): Promise<KeyStatus>;
+  setKey(provider: string, key: string): Promise<KeyStatus>;
+  clearKey(provider: string): Promise<KeyStatus>;
+  /** Provider presets for the settings sheet. */
+  providers(): Promise<Array<{ id: string; label: string; kind: string; baseUrl?: string; defaultModel: string; needsKey: boolean; hint: string }>>;
   /** True while the assistant is mid-answer. */
   onAssistantBusy(cb: (busy: boolean) => void): () => void;
 }

@@ -6,6 +6,7 @@ import type { Store } from './store';
 import type { Settings, AppInfo } from '../shared/types';
 import { mcpConfigSnippets, detectLauncher } from './mcp-config';
 import * as secrets from './secrets';
+import { PRESETS } from './providers';
 
 export interface IpcHost {
   store: Store;
@@ -40,9 +41,11 @@ export function registerIpc(host: IpcHost): void {
   h('msg:clear', () => { store.clearMessages(); });
 
   // The renderer can set, clear and check the key — never read it back.
-  h('key:status', () => secrets.status(store.paths.dir));
-  h('key:set', (key: string) => { const s = secrets.setKey(store.paths.dir, key); host.onKeyChanged(); return s; });
-  h('key:clear', () => { const s = secrets.clearKey(store.paths.dir); host.onKeyChanged(); return s; });
+  const provider = (p?: string) => p || store.settings().assistantProvider;
+  h('key:status', (p?: string) => secrets.status(store.paths.dir, provider(p)));
+  h('key:set', (p: string, key: string) => { const s = secrets.setKey(store.paths.dir, provider(p), key); host.onKeyChanged(); return s; });
+  h('key:clear', (p: string) => { const s = secrets.clearKey(store.paths.dir, provider(p)); host.onKeyChanged(); return s; });
+  h('app:providers', () => PRESETS);
 
   h('settings:get', () => store.settings());
   h('settings:set', (patch: Partial<Settings>) => {

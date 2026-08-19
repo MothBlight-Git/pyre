@@ -29,7 +29,9 @@ export const DEFAULT_SETTINGS: Settings = {
   displayId: null,
   mcpHttpPort: 41777,
   assistantEnabled: true,
+  assistantProvider: 'anthropic',
   assistantModel: 'claude-opus-5',
+  assistantBaseUrl: '',
 };
 
 export const WRITE_ERROR_COPY =
@@ -434,6 +436,8 @@ export function sanitizeSettings(s: Settings): Settings {
   const port = Math.round(Number(out.mcpHttpPort));
   out.mcpHttpPort = Number.isFinite(port) && port >= 0 && port <= 65535 ? port : DEFAULT_SETTINGS.mcpHttpPort;
   out.assistantEnabled = out.assistantEnabled !== false;
-  if (typeof out.assistantModel !== 'string' || !out.assistantModel.trim()) out.assistantModel = DEFAULT_SETTINGS.assistantModel;
+  if (typeof out.assistantModel !== 'string') out.assistantModel = DEFAULT_SETTINGS.assistantModel;
+  if (typeof out.assistantProvider !== 'string' || !out.assistantProvider.trim()) out.assistantProvider = DEFAULT_SETTINGS.assistantProvider;
+  if (typeof out.assistantBaseUrl !== 'string') out.assistantBaseUrl = '';
   return out;
 }

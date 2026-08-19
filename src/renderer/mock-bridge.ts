@@ -40,7 +40,7 @@ export function installMockBridge(): void {
   let settings: Settings = {
     dockSide: 'right', railWidth: +(q.get('w') ?? 340), alwaysOnTop: true, reserveScreenSpace: false,
     defaultDueTime: '17:00', globalHotkey: 'Control+Alt+N', startWithSystem: false, displayId: null, mcpHttpPort: 41777,
-    assistantEnabled: true, assistantModel: 'claude-opus-5',
+    assistantEnabled: true, assistantProvider: 'anthropic', assistantModel: 'claude-opus-5', assistantBaseUrl: '',
   };
   let messages: Message[] = q.has('msgs') ? [
     { id: 'm_1', role: 'user', text: 'move winwater to friday please', created: new Date(now - 6 * 60000).toISOString(), read: true },
@@ -112,6 +112,11 @@ export function installMockBridge(): void {
     setKey: async () => mockKey(true),
     clearKey: async () => mockKey(false),
     onAssistantBusy: on(listeners.busy),
+    providers: async () => [
+      { id: 'anthropic', label: 'Anthropic', kind: 'anthropic', defaultModel: 'claude-opus-5', needsKey: true, hint: 'Key from console.anthropic.com' },
+      { id: 'gemini', label: 'Google Gemini', kind: 'openai', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/', defaultModel: 'gemini-2.5-flash', needsKey: true, hint: 'Key from aistudio.google.com/apikey' },
+      { id: 'ollama', label: 'Ollama (local)', kind: 'openai', baseUrl: 'http://127.0.0.1:11434/v1', defaultModel: 'llama3.1', needsKey: false, hint: 'Runs on this machine. No key, no bill.' },
+    ],
   };
   window.pyre = bridge;
   // Debug hooks for the browser console.
