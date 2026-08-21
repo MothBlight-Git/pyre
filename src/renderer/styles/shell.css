@@ -110,9 +110,19 @@ html[data-mock] .sheet { left: calc(100% - var(--mock-rail, 340px)); }
 html[data-settings-open] .rail__grab { opacity: 1; pointer-events: auto; }
 .rail__grab:hover, .rail__grab:active { color: #FBFAF6; border-color: rgba(154, 144, 136, .6); }
 .rail__grab:focus-visible { outline: 2px solid #FBFAF6; outline-offset: 2px; }
-/* Rounded on the side facing the notes; flush against the window edge. */
-.rail[data-dock="right"] ~ .rail__grab { left: 0; border-radius: 0 10px 10px 0; border-left: 0; }
-.rail[data-dock="left"]  ~ .rail__grab { right: 0; border-radius: 10px 0 0 10px; border-right: 0; }
+/* The handle lives in the 24px allowance the main process adds OUTSIDE the
+   rail while Settings is open — a pill floating past the window's reserved
+   edge, over whatever is next to it. */
+.rail[data-dock="right"] ~ .rail__grab { left: 2px; border-radius: 10px; }
+.rail[data-dock="left"]  ~ .rail__grab { right: 2px; border-radius: 10px; }
+
+/* While the allowance exists, the rail and sheets stay off it. */
+html[data-settings-open] .rail[data-dock="right"] { margin-left: 24px; }
+html[data-settings-open] .rail[data-dock="left"]  { margin-right: 24px; }
+html[data-settings-open] .rail[data-dock="right"] ~ .sheet { left: 24px; }
+html[data-settings-open] .rail[data-dock="left"]  ~ .sheet { right: 24px; }
+html[data-settings-open] .rail[data-dock="right"] ~ .rail__resize { left: 24px; }
+html[data-settings-open] .rail[data-dock="left"]  ~ .rail__resize { right: 24px; }
 
 @media (prefers-reduced-motion: reduce) {
   .rail__grab { transition: none; }

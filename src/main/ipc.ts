@@ -18,6 +18,8 @@ export interface IpcHost {
   onKeyChanged: () => void;
   /** One trivial round trip against the configured provider. */
   testAssistant: () => Promise<{ ok: boolean; message: string }>;
+  /** Show or hide the transparent inner strip that hosts the resize handle. */
+  setGrabZone: (open: boolean) => void;
 }
 
 export function registerIpc(host: IpcHost): void {
@@ -49,6 +51,7 @@ export function registerIpc(host: IpcHost): void {
   h('key:clear', (p: string) => { const s = secrets.clearKey(store.paths.dir, provider(p)); host.onKeyChanged(); return s; });
   h('app:providers', () => PRESETS);
   h('assistant:test', () => host.testAssistant());
+  h('rail:grabZone', (open: boolean) => host.setGrabZone(!!open));
 
   h('settings:get', () => store.settings());
   h('settings:set', (patch: Partial<Settings>) => {

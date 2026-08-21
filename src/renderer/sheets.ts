@@ -34,10 +34,12 @@ export class Sheets {
 
   close(): void {
     if (!this.open) return;
+    const wasSettings = this.open === this.settings;
     this.open.hidden = true;
     this.open = null;
     // The edge grab handle shows only while Settings is open.
     delete document.documentElement.dataset.settingsOpen;
+    if (wasSettings) void window.pyre.grabZone(false);
     this.onClose();
   }
 
@@ -80,6 +82,7 @@ export class Sheets {
     this.settings.hidden = false;
     this.open = this.settings;
     document.documentElement.dataset.settingsOpen = '1';
+    void window.pyre.grabZone(true);
   }
 
   async renderSettings(): Promise<void> {

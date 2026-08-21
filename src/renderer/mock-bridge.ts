@@ -113,6 +113,7 @@ export function installMockBridge(): void {
     clearKey: async () => mockKey(false),
     onAssistantBusy: on(listeners.busy),
     testAssistant: async () => ({ ok: true, message: 'mock provider answered, and supports tools.' }),
+    grabZone: async () => {},
     providers: async () => [
       { id: 'anthropic', label: 'Anthropic', kind: 'anthropic', defaultModel: 'claude-opus-5', needsKey: true, hint: 'Key from console.anthropic.com' },
       { id: 'gemini', label: 'Google Gemini', kind: 'openai', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/', defaultModel: 'gemini-2.5-flash', needsKey: true, hint: 'Key from aistudio.google.com/apikey' },

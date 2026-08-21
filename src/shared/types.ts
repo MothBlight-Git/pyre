@@ -160,6 +160,8 @@ export interface PyreBridge extends PyreApi {
   providers(): Promise<Array<{ id: string; label: string; kind: string; baseUrl?: string; defaultModel: string; needsKey: boolean; hint: string }>>;
   /** One trivial round trip against the configured provider. */
   testAssistant(): Promise<{ ok: boolean; message: string }>;
+  /** Grow/shrink the window's inner edge for the visible resize handle. */
+  grabZone(open: boolean): Promise<void>;
   /** True while the assistant is mid-answer. */
   onAssistantBusy(cb: (busy: boolean) => void): () => void;
 }

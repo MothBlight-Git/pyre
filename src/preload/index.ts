@@ -41,6 +41,7 @@ const bridge: PyreBridge = {
   clearKey: (provider) => ipcRenderer.invoke('key:clear', provider),
   providers: () => ipcRenderer.invoke('app:providers'),
   testAssistant: () => ipcRenderer.invoke('assistant:test'),
+  grabZone: (open) => ipcRenderer.invoke('rail:grabZone', open),
   onAssistantBusy: on('agent:busy'),
 };
 

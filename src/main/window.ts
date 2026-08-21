@@ -8,6 +8,13 @@ import type { Settings } from '../shared/types';
 
 export const MIN_RAIL = 280;
 export const MAX_RAIL = 420;
+/**
+ * Extra transparent strip on the rail's INNER edge while Settings is open, so
+ * the resize handle can float visually outside the rail — past the AppBar
+ * reservation, over whatever is next to it. The reservation itself never
+ * includes it; only the window bounds grow.
+ */
+export const GRAB_PX = 24;
 
 export function pickDisplay(displayId: number | null): Display {
   const all = screen.getAllDisplays();
@@ -75,8 +82,18 @@ export function createRailWindow(s: Settings, preload: string): BrowserWindow {
  * Re-dock the window: full width/height/position from the chosen display.
  * Use when the dock side, display or reservation changes.
  */
-export function applyBounds(win: BrowserWindow, s: Settings): void {
-  win.setBounds(railBounds(s));
+export function applyBounds(win: BrowserWindow, s: Settings, extra = 0): void {
+  win.setBounds(expandInner(railBounds(s), s, extra));
+}
+
+/** Grow a rail rect by `extra` DIPs on its inner edge (the side facing the desktop). */
+export function expandInner(
+  b: { x: number; y: number; width: number; height: number }, s: Settings, extra: number,
+): { x: number; y: number; width: number; height: number } {
+  if (!extra) return b;
+  return s.dockSide === 'right'
+    ? { x: b.x - extra, y: b.y, width: b.width + extra, height: b.height }
+    : { x: b.x, y: b.y, width: b.width + extra, height: b.height };
 }
 
 /**
@@ -88,14 +105,20 @@ export function applyBounds(win: BrowserWindow, s: Settings): void {
  * dock side implies — the right edge when docked right — and move the other
  * one, then clamp back inside the work area so it can never end up off-screen.
  */
-export function applyWidth(win: BrowserWindow, s: Settings): void {
-  const width = Math.max(MIN_RAIL, Math.min(MAX_RAIL, s.railWidth));
+export function applyWidth(win: BrowserWindow, s: Settings, extra = 0): void {
+  // The window is the rail plus any grab allowance; both are recomputed from
+  // scratch each call, so toggling the allowance on and off cannot drift.
+  const width = Math.max(MIN_RAIL, Math.min(MAX_RAIL, s.railWidth)) + extra;
   const b = win.getBounds();
   const wa = pickDisplay(s.displayId).workArea;
 
   let x = s.dockSide === 'left' ? b.x : b.x + b.width - width;
-  // Never let either edge leave the work area.
-  x = Math.max(wa.x, Math.min(x, wa.x + wa.width - width));
+  // Never let the OUTER edge leave the work area. The inner allowance is
+  // allowed to poke past the work-area edge — floating over the desktop is
+  // its entire point when the rail itself is reserved.
+  x = s.dockSide === 'left'
+    ? Math.max(wa.x, x)
+    : Math.min(x, wa.x + wa.width - width);
 
   win.setBounds({ x, y: b.y, width, height: b.height });
 }

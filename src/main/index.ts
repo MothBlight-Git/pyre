@@ -54,7 +54,7 @@ function runApp(): void {
   const { app, BrowserWindow, globalShortcut, Tray, Menu, nativeImage, screen } = electron;
   const { resolvePaths } = require('./paths') as typeof import('./paths');
   const { Store } = require('./store') as typeof import('./store');
-  const { createRailWindow, applyBounds, applyWidth, railBoundsOnMonitor, rendererEntry } = require('./window') as typeof import('./window');
+  const { createRailWindow, applyBounds, applyWidth, railBoundsOnMonitor, expandInner, GRAB_PX, rendererEntry } = require('./window') as typeof import('./window');
   const { registerIpc, wireStoreEvents } = require('./ipc') as typeof import('./ipc');
   const { emberIcon } = require('./icon') as typeof import('./icon');
   const { startMcpHttp } = require('./mcp-http') as typeof import('./mcp-http');
@@ -69,6 +69,10 @@ function runApp(): void {
   }
 
   const log = (m: string) => { if (process.env.PYRE_DEBUG) console.log(`[pyre] ${m}`); };
+  // While Settings is open the window carries a transparent GRAB_PX strip on
+  // its inner edge for the resize handle. Never part of the AppBar reservation.
+  let grabZone = false;
+  const grabExtra = () => (grabZone ? GRAB_PX : 0);
   const paths = resolvePaths();
   const store = new Store(paths, log);
   let win: InstanceType<typeof BrowserWindow> | null = null;
@@ -144,7 +148,12 @@ function runApp(): void {
     // where the rail belongs re-docks it properly.
     const redocks = s.dockSide !== prev.dockSide || s.displayId !== prev.displayId
       || s.reserveScreenSpace !== prev.reserveScreenSpace;
-    if (redocks) applyBounds(win, s); else applyWidth(win, s);
+    // When the rail IS the reservation, the work area excludes it — so the
+    // work-area clamp inside applyWidth would hurl the window out of its own
+    // strip and applyReserve would hurl it back, once per resize tick. The
+    // reserve path owns geometry entirely while it is active.
+    if (redocks) applyBounds(win, s, grabExtra());
+    else if (!appbar.isReserved()) applyWidth(win, s, grabExtra());
     applyReserve(s);
   };
 
@@ -156,7 +165,7 @@ function runApp(): void {
   const applyReserve = (s: import('../shared/types').Settings) => {
     if (!win) return;
     if (!s.reserveScreenSpace) {
-      if (appbar.isReserved()) { appbar.release(win, log); applyBounds(win, s); }
+      if (appbar.isReserved()) { appbar.release(win, log); applyBounds(win, s, grabExtra()); }
       return;
     }
     // Two conversions matter here:
@@ -168,7 +177,9 @@ function runApp(): void {
     const wantDip = railBoundsOnMonitor(s);
     const wantPx = screen.dipToScreenRect(win, wantDip);
     const grantedPx = appbar.reserve(win, s.dockSide, wantPx, log);
-    if (grantedPx) win.setBounds(screen.screenToDipRect(win, grantedPx));
+    // The reservation is the rail alone; the window may be wider by the grab
+    // allowance, which floats past the reserved edge over whatever is there.
+    if (grantedPx) win.setBounds(expandInner(screen.screenToDipRect(win, grantedPx), s, grabExtra()));
   };
 
   app.on('second-instance', () => focusComposer());
@@ -188,6 +199,12 @@ function runApp(): void {
       mcpHttpUrl: () => mcpHttp?.url ?? null,
       onKeyChanged: () => maybeRespond(),
       testAssistant: () => testProvider(agentConfig()),
+      setGrabZone: (open: boolean) => {
+        if (grabZone === open || !win) return;
+        grabZone = open;
+        const s2 = store.settings();
+        applySettings(s2, s2);
+      },
     });
     store.on('messages', () => maybeRespond());
     wireStoreEvents(store, () => win);
