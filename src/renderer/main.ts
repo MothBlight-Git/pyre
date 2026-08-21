@@ -254,6 +254,23 @@ installDrag({
     return w;
   };
 
+  // While a handle is held the window resizes ~60x/s. The settings sheet is
+  // anchored to both window edges, so each tick re-wraps its text — visible
+  // judder. Freeze its width against the stable outer edge for the duration;
+  // it snaps to the final size once, at release.
+  const freezeSheet = () => {
+    const sh = document.getElementById('sheet-settings');
+    if (!sh || sh.hidden) return;
+    sh.style.width = `${sh.getBoundingClientRect().width}px`;
+    if (settings.dockSide === 'left') { sh.style.left = '0'; sh.style.right = 'auto'; }
+    else { sh.style.right = '0'; sh.style.left = 'auto'; }
+  };
+  const unfreezeSheet = () => {
+    const sh = document.getElementById('sheet-settings');
+    if (!sh) return;
+    sh.style.width = ''; sh.style.left = ''; sh.style.right = '';
+  };
+
   // Drag — shared by the invisible edge strip (always live) and the visible
   // ◂▸ handle that pops out while Settings is open.
   const attach = (el: HTMLElement) => {
@@ -263,6 +280,7 @@ installDrag({
     el.addEventListener('pointerdown', (ev) => {
       start = { x: ev.screenX, width: settings.railWidth, dock: settings.dockSide };
       el.setPointerCapture(ev.pointerId);
+      freezeSheet();
       void window.pyre.dragging(true);
     });
     el.addEventListener('pointermove', (ev) => {
@@ -271,7 +289,7 @@ installDrag({
       pendingWidth = Math.max(280, Math.min(420, Math.round(start.width + delta)));
       if (!raf) raf = requestAnimationFrame(() => { raf = 0; commit(pendingWidth); });
     });
-    const end = () => { start = null; void window.pyre.dragging(false); };
+    const end = () => { start = null; unfreezeSheet(); void window.pyre.dragging(false); };
     el.addEventListener('pointerup', end);
     el.addEventListener('pointercancel', end);
   };
