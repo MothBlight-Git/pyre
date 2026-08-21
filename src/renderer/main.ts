@@ -243,22 +243,49 @@ installDrag({
 // ---------------------------------------------------------------- resize handle
 
 (() => {
-  let start: { x: number; width: number; dock: 'left' | 'right' } | null = null;
-  let raf = 0;
-  let pendingWidth = 0;
-  resizeHandle.addEventListener('pointerdown', (ev) => {
-    start = { x: ev.screenX, width: settings.railWidth, dock: settings.dockSide };
-    resizeHandle.setPointerCapture(ev.pointerId);
+  const grab = $('rail-grab');
+  const readout = () => document.getElementById('set-width-val');
+
+  const commit = (width: number) => {
+    const w = Math.max(280, Math.min(420, Math.round(width)));
+    const r = readout();
+    if (r) r.textContent = `${w}px`;
+    void window.pyre.resizeRail(w);
+    return w;
+  };
+
+  // Drag — shared by the invisible edge strip (always live) and the visible
+  // ◂▸ handle that pops out while Settings is open.
+  const attach = (el: HTMLElement) => {
+    let start: { x: number; width: number; dock: 'left' | 'right' } | null = null;
+    let raf = 0;
+    let pendingWidth = 0;
+    el.addEventListener('pointerdown', (ev) => {
+      start = { x: ev.screenX, width: settings.railWidth, dock: settings.dockSide };
+      el.setPointerCapture(ev.pointerId);
+    });
+    el.addEventListener('pointermove', (ev) => {
+      if (!start) return;
+      const delta = start.dock === 'right' ? start.x - ev.screenX : ev.screenX - start.x;
+      pendingWidth = Math.max(280, Math.min(420, Math.round(start.width + delta)));
+      if (!raf) raf = requestAnimationFrame(() => { raf = 0; commit(pendingWidth); });
+    });
+    const end = () => { start = null; };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+  };
+  attach(resizeHandle);
+  attach(grab);
+
+  // Keyboard on the handle: out = wider, in = narrower, whichever way it faces.
+  grab.addEventListener('keydown', (ev) => {
+    const dir = ev.key === 'ArrowLeft' || ev.key === 'ArrowDown' ? -1
+              : ev.key === 'ArrowRight' || ev.key === 'ArrowUp' ? 1 : 0;
+    if (!dir) return;
+    ev.preventDefault();
+    const outward = settings.dockSide === 'right' ? -dir : dir;
+    commit(settings.railWidth + outward * (ev.shiftKey ? 40 : 10));
   });
-  resizeHandle.addEventListener('pointermove', (ev) => {
-    if (!start) return;
-    const delta = start.dock === 'right' ? start.x - ev.screenX : ev.screenX - start.x;
-    pendingWidth = Math.max(280, Math.min(420, Math.round(start.width + delta)));
-    if (!raf) raf = requestAnimationFrame(() => { raf = 0; void window.pyre.resizeRail(pendingWidth); });
-  });
-  const end = () => { start = null; };
-  resizeHandle.addEventListener('pointerup', end);
-  resizeHandle.addEventListener('pointercancel', end);
 })();
 
 // ---------------------------------------------------------------- bridge events

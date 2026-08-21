@@ -60,6 +60,11 @@
 
   <div class="rail__resize" id="rail-resize" title="Resize rail" aria-hidden="true"></div>
 
+  <!-- Visible resize affordance while Settings is open. The invisible edge
+       strip above always works; this is the discoverable version of it. -->
+  <button class="rail__grab" id="rail-grab" type="button" title="Drag to resize the rail"
+          aria-label="Rail width. Drag, or press the arrow keys, to resize.">◂▸</button>
+
   <!-- Overlays: soot sheets inside the same window. -->
   <section class="sheet" id="sheet-archive" hidden aria-label="Done archive">
     <header class="sheet__head"><span>DONE · LAST 50</span><button class="meta-btn" data-close type="button">CLOSE</button></header>

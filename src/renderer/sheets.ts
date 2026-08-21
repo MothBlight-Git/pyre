@@ -36,6 +36,8 @@ export class Sheets {
     if (!this.open) return;
     this.open.hidden = true;
     this.open = null;
+    // The edge grab handle shows only while Settings is open.
+    delete document.documentElement.dataset.settingsOpen;
     this.onClose();
   }
 
@@ -77,6 +79,7 @@ export class Sheets {
     await this.renderSettings();
     this.settings.hidden = false;
     this.open = this.settings;
+    document.documentElement.dataset.settingsOpen = '1';
   }
 
   async renderSettings(): Promise<void> {
@@ -122,14 +125,12 @@ export class Sheets {
     }
     row('Dock side', seg);
 
-    // Rail width
-    const wWrap = h('span', 'set__ctl');
-    const range = h('input');
-    range.type = 'range'; range.min = '280'; range.max = '420'; range.step = '2'; range.value = String(s.railWidth);
+    // Rail width — the ◂▸ handle on the window edge is the control; this row
+    // is the live readout. main.ts updates it by id while the handle drags.
     const val = h('span', 'set__val', `${s.railWidth}px`);
-    range.addEventListener('input', () => { val.textContent = `${range.value}px`; void window.pyre.resizeRail(+range.value); });
-    wWrap.append(range, val);
-    row('Rail width', wWrap);
+    val.id = 'set-width-val';
+    row('Rail width', val);
+    body.appendChild(h('p', 'set__note', 'Drag the ◂▸ handle on the edge of the window, or focus it and use the arrow keys. 280–420px.'));
 
     row('Always on top', toggle(s.alwaysOnTop, (v) => void set({ alwaysOnTop: v })));
 

@@ -43,7 +43,7 @@ Type into the entry box: **`topic / comment / due`** then `Enter`.
 | Cancel a drag | `Esc` | |
 | New note from anywhere | | `Ctrl+Alt+N` (global) |
 | Done archive / Settings | `DONE` / `SETTINGS` under the entry box | `Ctrl+,` for settings |
-| Resize the rail (280–420) | drag its inner edge, or the slider in Settings | |
+| Resize the rail (280–420) | drag its inner edge — open Settings for a visible ◂▸ handle (arrow keys work too) | |
 | Move the window | drag the invisible 28px strip along its top | |
 | **Quit** | tray icon → Quit Pyre | type `quit` or `exit` in the bar → Enter |
 | **Talk to the agent** | `TALK` button opens the lane | type `> your message` in the bar → Enter |
