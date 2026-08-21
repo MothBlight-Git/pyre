@@ -40,6 +40,7 @@ const bridge: PyreBridge = {
   setKey: (provider, key) => ipcRenderer.invoke('key:set', provider, key),
   clearKey: (provider) => ipcRenderer.invoke('key:clear', provider),
   providers: () => ipcRenderer.invoke('app:providers'),
+  testAssistant: () => ipcRenderer.invoke('assistant:test'),
   onAssistantBusy: on('agent:busy'),
 };
 

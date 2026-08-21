@@ -294,6 +294,28 @@ export class Sheets {
           blk.appendChild(urlRow);
         }
 
+        // Connection test — setup problems (server down, model not pulled, no
+        // tool support) surface here instead of as a failed message later.
+        const testRow = h('div', 'set');
+        testRow.appendChild(h('span', 'set__label', 'Connection'));
+        const tc = h('span', 'set__ctl');
+        const testBtn = h('button', 'meta-btn', 'TEST');
+        testBtn.type = 'button';
+        const testOut = h('p', 'set__note', '');
+        testBtn.addEventListener('click', async () => {
+          testBtn.textContent = 'TESTING…';
+          testOut.textContent = '';
+          testOut.classList.remove('is-warn');
+          const r = await window.pyre.testAssistant();
+          testBtn.textContent = 'TEST';
+          testOut.textContent = r.message;
+          if (!r.ok) testOut.classList.add('is-warn');
+        });
+        tc.appendChild(testBtn);
+        testRow.appendChild(tc);
+        blk.appendChild(testRow);
+        blk.appendChild(testOut);
+
         const enabled = h('div', 'set');
         enabled.appendChild(h('span', 'set__label', 'Answer > lines'));
         const ec = h('span', 'set__ctl');

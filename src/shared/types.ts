@@ -158,6 +158,8 @@ export interface PyreBridge extends PyreApi {
   clearKey(provider: string): Promise<KeyStatus>;
   /** Provider presets for the settings sheet. */
   providers(): Promise<Array<{ id: string; label: string; kind: string; baseUrl?: string; defaultModel: string; needsKey: boolean; hint: string }>>;
+  /** One trivial round trip against the configured provider. */
+  testAssistant(): Promise<{ ok: boolean; message: string }>;
   /** True while the assistant is mid-answer. */
   onAssistantBusy(cb: (busy: boolean) => void): () => void;
 }

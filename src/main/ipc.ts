@@ -16,6 +16,8 @@ export interface IpcHost {
   mcpHttpUrl: () => string | null;
   /** Called after the key changes, so the assistant picks it up. */
   onKeyChanged: () => void;
+  /** One trivial round trip against the configured provider. */
+  testAssistant: () => Promise<{ ok: boolean; message: string }>;
 }
 
 export function registerIpc(host: IpcHost): void {
@@ -46,6 +48,7 @@ export function registerIpc(host: IpcHost): void {
   h('key:set', (p: string, key: string) => { const s = secrets.setKey(store.paths.dir, provider(p), key); host.onKeyChanged(); return s; });
   h('key:clear', (p: string) => { const s = secrets.clearKey(store.paths.dir, provider(p)); host.onKeyChanged(); return s; });
   h('app:providers', () => PRESETS);
+  h('assistant:test', () => host.testAssistant());
 
   h('settings:get', () => store.settings());
   h('settings:set', (patch: Partial<Settings>) => {

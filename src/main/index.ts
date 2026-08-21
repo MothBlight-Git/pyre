@@ -59,7 +59,7 @@ function runApp(): void {
   const { emberIcon } = require('./icon') as typeof import('./icon');
   const { startMcpHttp } = require('./mcp-http') as typeof import('./mcp-http');
   const appbar = require('./appbar') as typeof import('./appbar');
-  const { Agent } = require('./agent') as typeof import('./agent');
+  const { Agent, testProvider } = require('./agent') as typeof import('./agent');
   const secrets = require('./secrets') as typeof import('./secrets');
 
   const gotLock = app.requestSingleInstanceLock();
@@ -187,6 +187,7 @@ function runApp(): void {
       store, getWindow: () => win, applySettings,
       mcpHttpUrl: () => mcpHttp?.url ?? null,
       onKeyChanged: () => maybeRespond(),
+      testAssistant: () => testProvider(agentConfig()),
     });
     store.on('messages', () => maybeRespond());
     wireStoreEvents(store, () => win);

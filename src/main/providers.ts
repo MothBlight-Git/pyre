@@ -23,6 +23,13 @@ export interface Preset {
   needsKey: boolean;
   /** Shown under the key field. */
   hint: string;
+  /**
+   * OpenAI renamed the output cap for newer models; Ollama, Gemini's compat
+   * layer and most others still accept only `max_tokens`. Sending the wrong
+   * one is a 400 on some endpoints and silently ignored on others, so it is
+   * per-provider rather than guessed.
+   */
+  tokenParam?: 'max_tokens' | 'max_completion_tokens';
 }
 
 export const PRESETS: Preset[] = [
@@ -51,6 +58,7 @@ export const PRESETS: Preset[] = [
     defaultModel: 'gpt-5',
     needsKey: true,
     hint: 'Key from platform.openai.com',
+    tokenParam: 'max_completion_tokens',
   },
   {
     id: 'openrouter',
@@ -66,9 +74,9 @@ export const PRESETS: Preset[] = [
     label: 'Ollama (local)',
     kind: 'openai',
     baseUrl: 'http://127.0.0.1:11434/v1',
-    defaultModel: 'llama3.1',
+    defaultModel: 'phi4-mini',
     needsKey: false,
-    hint: 'Runs on this machine. No key, no bill. Needs a model that supports tools.',
+    hint: 'Runs on this machine — no key, no bill. Use a model with tool support: phi4-mini, llama3.1, qwen2.5. Plain phi4 can talk but cannot change notes.',
   },
   {
     id: 'custom',

@@ -217,3 +217,88 @@ describe('tool defs are provider-neutral', () => {
     expect(cleared.state).toBe('cold');
   });
 });
+
+describe('local models (Ollama / phi-4 shaped)', () => {
+  /** Reply with an OpenAI-style error, the way Ollama's compat layer does. */
+  const errorOnce = (status: number, message: string) => ({ __error: { status, message } });
+
+  beforeEach(() => {
+    // Extend the stub so a queued entry can be an error response.
+    server.removeAllListeners('request');
+    server.on('request', (req, res) => {
+      const chunks: Buffer[] = [];
+      req.on('data', (c) => chunks.push(c));
+      req.on('end', () => {
+        seen.push(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'));
+        const body: any = queue.shift() ?? say('(stub ran out of replies)');
+        if (body.__error) {
+          res.writeHead(body.__error.status, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ error: { message: body.__error.message, type: 'invalid_request_error' } }));
+          return;
+        }
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ id: 'x', object: 'chat.completion', model: 'stub', ...body }));
+      });
+    });
+  });
+
+  it('falls back to a plain answer when the model cannot call tools', async () => {
+    // What Ollama says for a model like plain phi4, which has no tool template.
+    queue = [
+      errorOnce(400, 'registry.ollama.ai/library/phi4 does not support tools'),
+      say('You have four notes, one overdue.'),
+    ];
+    store.say('user', 'what is on my wall?');
+    const r = await agentFor({ model: 'phi4' }).respond();
+    expect(r?.ok).toBe(true);
+    expect(r?.text).toContain('You have four notes');
+    // It must admit it cannot change anything, and name models that can.
+    expect(r?.text).toMatch(/cannot call tools/i);
+    expect(r?.text).toMatch(/phi4-mini/);
+    // The retry dropped `tools` rather than sending them again.
+    expect(seen[0].tools).toBeTruthy();
+    expect(seen[1].tools).toBeUndefined();
+  });
+
+  it('tells you to pull a model that is not installed', async () => {
+    queue = [errorOnce(404, 'model "phi4-mini" not found, try pulling it first')];
+    store.say('user', 'hello');
+    const r = await agentFor({ model: 'phi4-mini' }).respond();
+    expect(r?.ok).toBe(false);
+    expect(store.messages().at(-1)!.text).toMatch(/ollama pull phi4-mini/);
+  });
+
+  it('accepts tool arguments as an object, which local runtimes emit', async () => {
+    queue = [
+      { choices: [{ message: { role: 'assistant', content: null, tool_calls: [
+        // Not a JSON string — the shape Ollama sometimes returns.
+        { id: 'c1', type: 'function', function: { name: 'add_note', arguments: { topic: 'LOCAL', comment: 'from a local model' } } },
+      ] } }] },
+      say('Added it.'),
+    ];
+    store.say('user', 'add a note');
+    const r = await agentFor().respond();
+    expect(r?.ok).toBe(true);
+    expect(store.notes()[0]).toMatchObject({ topic: 'LOCAL' });
+  });
+
+  it('recovers JSON wrapped in a markdown fence', async () => {
+    queue = [
+      { choices: [{ message: { role: 'assistant', content: null, tool_calls: [
+        { id: 'c1', type: 'function', function: { name: 'add_note', arguments: '```json\n{"topic":"FENCED","comment":"x"}\n```' } },
+      ] } }] },
+      say('Done.'),
+    ];
+    store.say('user', 'add');
+    await agentFor().respond();
+    expect(store.notes()[0]).toMatchObject({ topic: 'FENCED' });
+  });
+
+  it('sends max_tokens, not max_completion_tokens, to non-OpenAI endpoints', async () => {
+    queue = [say('ok')];
+    store.say('user', 'hi');
+    await agentFor().respond();   // providerId 'custom' → default max_tokens
+    expect(seen[0].max_tokens).toBe(8000);
+    expect(seen[0].max_completion_tokens).toBeUndefined();
+  });
+});

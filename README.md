@@ -130,6 +130,35 @@ The running app serves streamable-HTTP MCP at `http://127.0.0.1:41777/mcp` (port
 
 > **Which Pyre.exe?** The **installer** build and the **portable folder** build (`Pyre-x.y.z-win.zip`, unzip anywhere) are the real binary and answer stdio MCP. The **single-file portable** `Pyre.exe` is an NSIS launcher that extracts and starts the real app *without* passing stdio through, so `--mcp` cannot work through it — Settings detects this and shows only the HTTP config. Running from source: `command` = `node_modules\electron\dist\electron.exe`, `args` = `["<repo path>", "--mcp"]`.
 
+### 3. Built-in assistant — Pyre answers `>` lines itself
+
+If no external agent is connected, Pyre can drive the same tools directly. **Settings → Assistant** picks a provider; **TEST** does one real round trip and tells you what it found — reachable, model missing, or reachable-but-cannot-call-tools.
+
+| Provider | Key | Default model |
+|---|---|---|
+| Anthropic | `console.anthropic.com` | `claude-opus-5` |
+| Google Gemini | `aistudio.google.com/apikey` | `gemini-2.5-flash` |
+| OpenAI | `platform.openai.com` | `gpt-5` |
+| OpenRouter | `openrouter.ai/keys` | `anthropic/claude-sonnet-4.5` |
+| **Ollama (local)** | **none** | **`phi4-mini`** |
+| Custom | optional | any OpenAI-shaped endpoint |
+
+Keys are encrypted at rest with the OS keystore (DPAPI on Windows) in `credentials.bin`, never written to `settings.json` and never handed to the renderer — the window can set, clear and check a key but cannot read one back. `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY` and `OPENROUTER_API_KEY` are picked up from the environment if no key is stored.
+
+#### Ollama and phi-4
+
+Nothing leaves the machine and there is no key and no bill:
+
+```
+ollama pull phi4-mini
+```
+
+Then Settings → Assistant → **Ollama (local)** → TEST. Pyre talks to `http://127.0.0.1:11434/v1`; change the base URL if Ollama runs elsewhere.
+
+> **Use `phi4-mini`, not `phi4`.** The assistant works entirely by calling tools, and Microsoft's 14B `phi4` ships without a tool template — Ollama reports `does not support tools`. The 3.8B `phi4-mini` does support them. Pyre handles the refusal gracefully rather than failing: it retries without tools so the model can still talk about your wall, and says plainly that it cannot change anything with the current model. `llama3.1` and `qwen2.5` also work.
+
+A local model is meaningfully weaker than a frontier one. Expect it to handle "add X due friday" and "what's burning" well, and to need more explicit phrasing for anything multi-step.
+
 ## Accessibility
 
 `prefers-reduced-motion` gives a full alternate presentation (no transitions, no embers, no flicker — front position, bloom and the countdown carry the reading). Every note is `Tab`-reachable with all actions on keys; the accessible name reads like *"WINWATER. Send BEP to Powell. Due in 6 minutes. Pinned to column 1, row 3."*

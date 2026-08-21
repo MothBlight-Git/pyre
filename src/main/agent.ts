@@ -130,7 +130,43 @@ async function runAnthropic(cfg: AgentConfig, system: string, turns: ReturnType<
 
 // ---------------------------------------------------------------- openai-shaped
 
+/**
+ * True when the endpoint is telling us this model has no tool calling. Local
+ * models are the common case — Ollama's plain `phi4`, for instance, has no
+ * tool template — and the wording differs per runtime, so match loosely.
+ */
+function looksLikeNoToolSupport(e: unknown): boolean {
+  const m = (e as { message?: string })?.message ?? String(e);
+  return /does not support tools|doesn't support tools|tools?.{0,20}not supported|unsupported.{0,20}tools?|no tool support/i.test(m);
+}
+
+/** Ollama returns this when the model has not been pulled yet. */
+function missingModelName(e: unknown, model: string): string | null {
+  const m = (e as { message?: string })?.message ?? String(e);
+  return /not found|no such model|try pulling/i.test(m) ? model : null;
+}
+
+/**
+ * Tool arguments should be a JSON string per the OpenAI schema, but local
+ * runtimes sometimes hand back an object, or JSON wrapped in a markdown fence.
+ * Returns null when it genuinely cannot be read.
+ */
+function parseToolArgs(raw: unknown): Record<string, unknown> | null {
+  if (raw == null || raw === '') return {};
+  if (typeof raw === 'object') return raw as Record<string, unknown>;
+  if (typeof raw !== 'string') return null;
+  const text = raw.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+  try { return JSON.parse(text); } catch { /* fall through */ }
+  // Last resort: the first {...} span, for models that prepend prose.
+  const from = text.indexOf('{'), to = text.lastIndexOf('}');
+  if (from >= 0 && to > from) {
+    try { return JSON.parse(text.slice(from, to + 1)); } catch { /* give up */ }
+  }
+  return null;
+}
+
 async function runOpenAI(cfg: AgentConfig, system: string, turns: ReturnType<typeof history>, tools: ToolDef[]): Promise<string> {
+  const p = preset(cfg.providerId);
   const client = new OpenAI({
     // Local runtimes accept any non-empty key; cloud ones need the real thing.
     apiKey: cfg.apiKey || 'not-needed',
@@ -149,32 +185,65 @@ async function runOpenAI(cfg: AgentConfig, system: string, turns: ReturnType<typ
     ...turns,
   ];
 
-  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    const res = await client.chat.completions.create({
+  // Some models cannot call tools at all. We only find out by asking, so drop
+  // to a plain conversation on that specific failure rather than erroring out.
+  let useTools = true;
+  let toolsWereRefused = false;
+
+  const ask = async () => {
+    const body: Record<string, unknown> = {
       model: cfg.model,
-      max_completion_tokens: MAX_TOKENS,
       messages,
-      tools: spec,
-    });
+      [p.tokenParam ?? 'max_tokens']: MAX_TOKENS,
+    };
+    if (useTools) body.tools = spec;
+    return client.chat.completions.create(body as never) as Promise<OpenAI.Chat.ChatCompletion>;
+  };
+
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    let res: OpenAI.Chat.ChatCompletion;
+    try {
+      res = await ask();
+    } catch (e) {
+      if (useTools && looksLikeNoToolSupport(e)) {
+        // Retry once without tools, and say so, rather than pretending it worked.
+        useTools = false;
+        toolsWereRefused = true;
+        messages.push({
+          role: 'system',
+          content: 'This model cannot call tools, so you cannot read or change the wall this turn. Answer from the summary above and say plainly that you cannot make changes with the current model.',
+        });
+        continue;
+      }
+      const missing = missingModelName(e, cfg.model);
+      if (missing) throw new Error(`The model "${missing}" is not available. If you are running Ollama, pull it first: ollama pull ${missing}`);
+      throw e;
+    }
+
     const msg = res.choices[0]?.message;
     if (!msg) return 'The model returned nothing.';
 
     const calls = msg.tool_calls ?? [];
-    if (!calls.length) return (msg.content ?? '').trim();
+    if (!calls.length) {
+      const text = (msg.content ?? '').trim();
+      if (toolsWereRefused) {
+        return `${text || 'I can only talk about the wall right now.'}\n\n(This model cannot call tools, so I cannot change notes. Try phi4-mini, llama3.1 or qwen2.5.)`;
+      }
+      return text;
+    }
 
     messages.push(msg);
     for (const call of calls) {
       // Only function calls are ever requested; anything else is a protocol surprise.
       const fn = 'function' in call ? call.function : undefined;
       const def = fn ? byName.get(fn.name) : undefined;
-      let result = '';
+      let result: string;
       if (!fn || !def) {
         result = `No such tool: ${fn?.name ?? 'unknown'}`;
       } else {
-        let args: Record<string, unknown> | null = {};
-        try { args = fn.arguments ? JSON.parse(fn.arguments) : {}; }
-        catch { args = null; result = `Could not parse the arguments for ${fn.name}.`; }
-        if (args) {
+        const args = parseToolArgs(fn.arguments);
+        if (!args) result = `Could not parse the arguments for ${fn.name}.`;
+        else {
           try { result = await def.run(args); }
           catch (e) { result = `Tool failed: ${(e as Error).message}`; }
         }
@@ -183,6 +252,39 @@ async function runOpenAI(cfg: AgentConfig, system: string, turns: ReturnType<typ
     }
   }
   return 'I got stuck going back and forth with the tools — try asking more specifically.';
+}
+
+/**
+ * One trivial round trip, so setup problems surface in Settings rather than as
+ * a failed message later. Reports what actually happened, not just ok/not-ok.
+ */
+export async function testProvider(cfg: AgentConfig): Promise<{ ok: boolean; message: string }> {
+  const p = preset(cfg.providerId);
+  if (p.needsKey && !cfg.apiKey) return { ok: false, message: 'No API key set for this provider.' };
+  if (!cfg.model) return { ok: false, message: 'No model set.' };
+  try {
+    if (p.kind === 'anthropic') {
+      const client = new Anthropic({ apiKey: cfg.apiKey ?? '', ...(cfg.baseUrl ? { baseURL: cfg.baseUrl } : {}), timeout: 20000, maxRetries: 0 });
+      await client.messages.create({ model: cfg.model, max_tokens: 1, messages: [{ role: 'user', content: 'hi' }] });
+      return { ok: true, message: `${cfg.model} answered.` };
+    }
+    const client = new OpenAI({ apiKey: cfg.apiKey || 'not-needed', ...(cfg.baseUrl ? { baseURL: cfg.baseUrl } : {}), timeout: 20000, maxRetries: 0 });
+    // Ask WITH a tool, because tool support is the thing that actually matters.
+    const probe = [{ type: 'function' as const, function: { name: 'ping', description: 'Reply pong.', parameters: { type: 'object', properties: {}, required: [] } } }];
+    try {
+      await client.chat.completions.create({ model: cfg.model, messages: [{ role: 'user', content: 'hi' }], tools: probe, [p.tokenParam ?? 'max_tokens']: 16 } as never);
+      return { ok: true, message: `${cfg.model} answered, and supports tools.` };
+    } catch (e) {
+      if (looksLikeNoToolSupport(e)) {
+        return { ok: false, message: `${cfg.model} runs, but cannot call tools — it can talk about the wall without changing it. Try phi4-mini, llama3.1 or qwen2.5.` };
+      }
+      const missing = missingModelName(e, cfg.model);
+      if (missing) return { ok: false, message: `Not installed. Run:  ollama pull ${missing}` };
+      throw e;
+    }
+  } catch (e) {
+    return { ok: false, message: describe(e) };
+  }
 }
 
 // ---------------------------------------------------------------- agent
