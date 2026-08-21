@@ -105,20 +105,23 @@ export function expandInner(
  * dock side implies — the right edge when docked right — and move the other
  * one, then clamp back inside the work area so it can never end up off-screen.
  */
-export function applyWidth(win: BrowserWindow, s: Settings, extra = 0): void {
+export function applyWidth(win: BrowserWindow, s: Settings, extra = 0, clamp = true): void {
   // The window is the rail plus any grab allowance; both are recomputed from
   // scratch each call, so toggling the allowance on and off cannot drift.
   const width = Math.max(MIN_RAIL, Math.min(MAX_RAIL, s.railWidth)) + extra;
   const b = win.getBounds();
-  const wa = pickDisplay(s.displayId).workArea;
 
   let x = s.dockSide === 'left' ? b.x : b.x + b.width - width;
-  // Never let the OUTER edge leave the work area. The inner allowance is
-  // allowed to poke past the work-area edge — floating over the desktop is
-  // its entire point when the rail itself is reserved.
-  x = s.dockSide === 'left'
-    ? Math.max(wa.x, x)
-    : Math.min(x, wa.x + wa.width - width);
+  // Never let the outer edge leave the work area — EXCEPT while our own
+  // AppBar reservation is active. The work area excludes that reservation,
+  // so clamping against it would throw the window out of its own strip;
+  // the caller passes clamp=false and the reserve path re-docks at rest.
+  if (clamp) {
+    const wa = pickDisplay(s.displayId).workArea;
+    x = s.dockSide === 'left'
+      ? Math.max(wa.x, x)
+      : Math.min(x, wa.x + wa.width - width);
+  }
 
   win.setBounds({ x, y: b.y, width, height: b.height });
 }

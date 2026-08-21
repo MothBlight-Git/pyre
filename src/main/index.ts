@@ -148,13 +148,20 @@ function runApp(): void {
     // where the rail belongs re-docks it properly.
     const redocks = s.dockSide !== prev.dockSide || s.displayId !== prev.displayId
       || s.reserveScreenSpace !== prev.reserveScreenSpace;
-    // When the rail IS the reservation, the work area excludes it — so the
-    // work-area clamp inside applyWidth would hurl the window out of its own
-    // strip and applyReserve would hurl it back, once per resize tick. The
-    // reserve path owns geometry entirely while it is active.
-    if (redocks) applyBounds(win, s, grabExtra());
-    else if (!appbar.isReserved()) applyWidth(win, s, grabExtra());
-    applyReserve(s);
+    // Real AppBars (the taskbar) do not renegotiate their reservation on
+    // every tick of a drag — they move the window live and commit the
+    // reservation once at rest. Doing SETPOS + snap-to-granted per tick made
+    // the window visibly fight its own reservation under a real mouse drag
+    // (~60 commits/s, each with DIP↔physical rounding jitter).
+    if (redocks) {
+      applyBounds(win, s, grabExtra());
+      applyReserve(s);
+    } else {
+      // While reserved, skip the work-area clamp: the work area excludes our
+      // own strip, so clamping against it throws the window out of it.
+      applyWidth(win, s, grabExtra(), !appbar.isReserved());
+      if (appbar.isReserved()) scheduleReserve(); else applyReserve(s);
+    }
   };
 
   /**
@@ -162,6 +169,15 @@ function runApp(): void {
    * the width. Windows can hand back a different rect than we asked for, in
    * which case the window moves to what we were actually given.
    */
+  // Trailing debounce for reservation updates during a live resize. 250ms of
+  // stillness is the "at rest" signal; the final applyReserve then does the
+  // one SETPOS + granted-rect snap.
+  let reserveTimer: NodeJS.Timeout | null = null;
+  const scheduleReserve = () => {
+    if (reserveTimer) clearTimeout(reserveTimer);
+    reserveTimer = setTimeout(() => { reserveTimer = null; applyReserve(store.settings()); }, 250);
+  };
+
   const applyReserve = (s: import('../shared/types').Settings) => {
     if (!win) return;
     if (!s.reserveScreenSpace) {
