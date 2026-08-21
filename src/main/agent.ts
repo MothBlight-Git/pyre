@@ -30,6 +30,10 @@ import type { Message } from '../shared/types';
 const MAX_TOKENS = 8000;
 /** Per request, including retries. Long enough for tool round-trips, short enough to fail visibly. */
 const REQUEST_TIMEOUT_MS = 90_000;
+// A local model is loaded from disk on first use — phi4-mini's 2.5 GB took 20 s
+// on a warm SSD, and a cold page cache is slower. The test must outlast that or
+// it reports "unreachable" for a server that is merely still waking up.
+const TEST_TIMEOUT_MS = 120_000;
 /** Hard stop on the OpenAI-side loop, so a confused model cannot spin forever. */
 const MAX_TOOL_ROUNDS = 8;
 /** How much of the lane to replay as conversation history. */
@@ -165,6 +169,76 @@ function parseToolArgs(raw: unknown): Record<string, unknown> | null {
   return null;
 }
 
+/**
+ * True when the reply asserts, as completed fact, that the wall was changed.
+ * Anchored at the start or matched as a passive completion, so a read answer
+ * that merely mentions past events ("3 notes were added yesterday") does not
+ * trip it. Only consulted when no mutating tool actually ran.
+ */
+export function claimsAChange(text: string): boolean {
+  const t = text.trim();
+  const asserted = /^(?:(?:ok|okay|sure|alright|done|great)[,.!\s]*)?(?:i(?:'ve| have)?\s+)?(?:added|created|moved|pinned|released|banked|snoozed|deleted|removed|snuffed|updated|renamed|marked|set)\b/i;
+  const passive = /\b(?:has|have) been (?:added|created|moved|pinned|released|banked|snoozed|deleted|removed|updated|marked)\b/i;
+  return asserted.test(t) || passive.test(t);
+}
+
+
+/**
+ * Pull tool calls out of the message CONTENT.
+ *
+ * phi4-mini decides to call a tool correctly but emits it as text — either
+ * after a literal `<|tool_call|>` token or as a bare JSON array — and Ollama's
+ * template does not lift it into `tool_calls`. Without this the model looks
+ * like it is hallucinating when it is really being misread, and the raw JSON
+ * leaks into the talk lane. Returns [] when there is nothing tool-shaped.
+ */
+export function extractInlineToolCalls(content: string): Array<{ name: string; arguments: unknown }> {
+  if (!content) return [];
+  const text = content.replace(/<\|[a-z_]+\|>/gi, ' ');
+  const found: Array<{ name: string; arguments: unknown }> = [];
+  const take = (v: unknown): void => {
+    if (Array.isArray(v)) { v.forEach(take); return; }
+    if (v && typeof v === 'object') {
+      const o = v as Record<string, unknown>;
+      if (typeof o.name === 'string' && 'arguments' in o) found.push({ name: o.name, arguments: o.arguments });
+    }
+  };
+  // Try every balanced { or [ span. Cheap enough on a single reply, and far
+  // more forgiving than a regex about nesting and prose either side.
+  for (let i = 0; i < text.length; i++) {
+    const open = text[i];
+    if (open !== '{' && open !== '[') continue;
+    const close = open === '{' ? '}' : ']';
+    let depth = 0, inStr = false, esc = false;
+    for (let j = i; j < text.length; j++) {
+      const c = text[j];
+      if (esc) { esc = false; continue; }
+      if (c === '\\') { esc = true; continue; }
+      if (c === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (c === open) depth++;
+      else if (c === close) {
+        depth--;
+        if (depth === 0) {
+          try { take(JSON.parse(text.slice(i, j + 1))); i = j; } catch { /* not JSON */ }
+          break;
+        }
+      }
+    }
+  }
+  return found;
+}
+
+/** The reply with any inline tool-call JSON stripped, so it never reaches the lane. */
+export function stripInlineToolCalls(content: string): string {
+  return content
+    .replace(/<\|[a-z_]+\|>/gi, ' ')
+    .replace(/\[?\s*\{[^{}]*"name"\s*:[\s\S]*?"arguments"\s*:\s*\{[\s\S]*?\}\s*\}\s*\]?/g, ' ')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 async function runOpenAI(cfg: AgentConfig, system: string, turns: ReturnType<typeof history>, tools: ToolDef[]): Promise<string> {
   const p = preset(cfg.providerId);
   const client = new OpenAI({
@@ -189,6 +263,10 @@ async function runOpenAI(cfg: AgentConfig, system: string, turns: ReturnType<typ
   // to a plain conversation on that specific failure rather than erroring out.
   let useTools = true;
   let toolsWereRefused = false;
+  // Weak models answer "move X to friday" with a confident "Done." and no tool
+  // call. Repeating that to the user is worse than any error message, so we
+  // track whether the wall was genuinely touched this turn.
+  let mutationsRun = 0;
 
   const ask = async () => {
     const body: Record<string, unknown> = {
@@ -224,12 +302,43 @@ async function runOpenAI(cfg: AgentConfig, system: string, turns: ReturnType<typ
     if (!msg) return 'The model returned nothing.';
 
     const calls = msg.tool_calls ?? [];
-    if (!calls.length) {
-      const text = (msg.content ?? '').trim();
+    // phi4-mini writes its tool calls into the content instead. Read them
+    // rather than treating a correct decision as a hallucination.
+    const inline = calls.length ? [] : extractInlineToolCalls(msg.content ?? '');
+
+    if (!calls.length && !inline.length) {
+      const text = stripInlineToolCalls(msg.content ?? '');
       if (toolsWereRefused) {
-        return `${text || 'I can only talk about the wall right now.'}\n\n(This model cannot call tools, so I cannot change notes. Try phi4-mini, llama3.1 or qwen2.5.)`;
+        return `${text || 'I can only talk about the wall right now.'}\n\n(This model cannot call tools, so I cannot change notes. Try qwen2.5 or llama3.1.)`;
+      }
+      if (!mutationsRun && claimsAChange(text)) {
+        // Say what is true: it reported an action it never performed.
+        return `${text}\n\n⚠ Nothing actually changed — the model reported an action without calling the tool that performs it. Check the wall. Small local models do this; qwen2.5 or llama3.1 are more reliable for changes.`;
       }
       return text;
+    }
+
+    if (inline.length) {
+      // No tool_call ids exist to reply to, so the results go back as a plain
+      // message. Keeps the exchange valid for a model that is not really
+      // speaking the tool protocol in the first place.
+      messages.push({ role: 'assistant', content: stripInlineToolCalls(msg.content ?? '') || '(calling tools)' });
+      const lines: string[] = [];
+      for (const c of inline) {
+        const def = byName.get(c.name);
+        if (!def) { lines.push(`${c.name} → no such tool`); continue; }
+        const args = parseToolArgs(c.arguments);
+        if (!args) { lines.push(`${c.name} → could not parse arguments`); continue; }
+        try {
+          const r = await def.run(args);
+          if (def.mutates) mutationsRun++;
+          lines.push(`${c.name} → ${r}`);
+        } catch (e) {
+          lines.push(`${c.name} → failed: ${(e as Error).message}`);
+        }
+      }
+      messages.push({ role: 'user', content: `Tool results:\n${lines.join('\n')}\n\nNow reply to me in one short sentence. Do not write any more tool calls.` });
+      continue;
     }
 
     messages.push(msg);
@@ -244,7 +353,7 @@ async function runOpenAI(cfg: AgentConfig, system: string, turns: ReturnType<typ
         const args = parseToolArgs(fn.arguments);
         if (!args) result = `Could not parse the arguments for ${fn.name}.`;
         else {
-          try { result = await def.run(args); }
+          try { result = await def.run(args); if (def.mutates) mutationsRun++; }
           catch (e) { result = `Tool failed: ${(e as Error).message}`; }
         }
       }
@@ -264,26 +373,63 @@ export async function testProvider(cfg: AgentConfig): Promise<{ ok: boolean; mes
   if (!cfg.model) return { ok: false, message: 'No model set.' };
   try {
     if (p.kind === 'anthropic') {
-      const client = new Anthropic({ apiKey: cfg.apiKey ?? '', ...(cfg.baseUrl ? { baseURL: cfg.baseUrl } : {}), timeout: 20000, maxRetries: 0 });
+      const client = new Anthropic({ apiKey: cfg.apiKey ?? '', ...(cfg.baseUrl ? { baseURL: cfg.baseUrl } : {}), timeout: TEST_TIMEOUT_MS, maxRetries: 0 });
       await client.messages.create({ model: cfg.model, max_tokens: 1, messages: [{ role: 'user', content: 'hi' }] });
       return { ok: true, message: `${cfg.model} answered.` };
     }
-    const client = new OpenAI({ apiKey: cfg.apiKey || 'not-needed', ...(cfg.baseUrl ? { baseURL: cfg.baseUrl } : {}), timeout: 20000, maxRetries: 0 });
-    // Ask WITH a tool, because tool support is the thing that actually matters.
-    const probe = [{ type: 'function' as const, function: { name: 'ping', description: 'Reply pong.', parameters: { type: 'object', properties: {}, required: [] } } }];
+    const client = new OpenAI({ apiKey: cfg.apiKey || 'not-needed', ...(cfg.baseUrl ? { baseURL: cfg.baseUrl } : {}), timeout: TEST_TIMEOUT_MS, maxRetries: 0 });
+    // Ask in a way that REQUIRES a tool call, and check one actually comes
+    // back. Accepting a `tools` parameter proves nothing: phi4-mini accepts it
+    // and then answers "Added OLLAMA." having called nothing at all. That
+    // failure is invisible until the user notices the wall never changed, so
+    // the test has to provoke it rather than assume competence.
+    const probe = [{
+      type: 'function' as const,
+      function: {
+        name: 'add_note',
+        description: 'Add a note to the wall. You MUST call this to add a note.',
+        parameters: { type: 'object', properties: { topic: { type: 'string' }, comment: { type: 'string' } }, required: ['topic', 'comment'] },
+      },
+    }];
     try {
-      await client.chat.completions.create({ model: cfg.model, messages: [{ role: 'user', content: 'hi' }], tools: probe, [p.tokenParam ?? 'max_tokens']: 16 } as never);
-      return { ok: true, message: `${cfg.model} answered, and supports tools.` };
+      // Small local models are inconsistent about whether they reach for a
+      // tool, so a single miss is not proof of incapability. Give the probe
+      // the same shape of system prompt the real path uses, and allow a
+      // second attempt before reporting anything against the model.
+      let viaProtocol = false;
+      let viaContent = false;
+      for (let attempt = 0; attempt < 2 && !viaProtocol && !viaContent; attempt++) {
+        const r = await client.chat.completions.create({
+          model: cfg.model,
+          messages: [
+            { role: 'system', content: 'You manage a wall of deadline notes. You have tools. When the user asks for a change, call the matching tool — never claim a change you have not made by calling a tool.' },
+            { role: 'user', content: 'Add a note with topic TEST and comment hello.' },
+          ],
+          tools: probe,
+          [p.tokenParam ?? 'max_tokens']: 200,
+        } as never) as OpenAI.Chat.ChatCompletion;
+        const m = r.choices[0]?.message;
+        viaProtocol = (m?.tool_calls ?? []).length > 0;
+        // An inline call counts: runOpenAI executes those too, so reporting a
+        // failure here would condemn a model Pyre can actually drive.
+        viaContent = extractInlineToolCalls(m?.content ?? '').length > 0;
+      }
+      if (!viaProtocol && !viaContent) {
+        return { ok: false, message: `${cfg.model} answered, but did not call the tool in two attempts — it may report changes it never makes. qwen2.5 or llama3.1 are more reliable.` };
+      }
+      return viaProtocol
+        ? { ok: true, message: `${cfg.model} answered and called the tool correctly.` }
+        : { ok: true, message: `${cfg.model} works. It writes tool calls as text instead of using the tool protocol; Pyre reads those, so changes land — but it is less consistent than qwen2.5 or llama3.1.` };
     } catch (e) {
       if (looksLikeNoToolSupport(e)) {
-        return { ok: false, message: `${cfg.model} runs, but cannot call tools — it can talk about the wall without changing it. Try phi4-mini, llama3.1 or qwen2.5.` };
+        return { ok: false, message: `${cfg.model} runs, but cannot call tools — it can talk about the wall without changing it. Try qwen2.5 or llama3.1.` };
       }
       const missing = missingModelName(e, cfg.model);
       if (missing) return { ok: false, message: `Not installed. Run:  ollama pull ${missing}` };
       throw e;
     }
   } catch (e) {
-    return { ok: false, message: describe(e) };
+    return { ok: false, message: describe(e, cfg.providerId) };
   }
 }
 
@@ -329,7 +475,7 @@ export class Agent {
       this.log(`agent replied via ${cfg.providerId}/${cfg.model}`);
       return { ok: true, text: said };
     } catch (e) {
-      const msg = describe(e);
+      const msg = describe(e, cfg.providerId);
       this.log(`agent error (${cfg.providerId}/${cfg.model}): ${msg}`);
       this.store.say('agent', msg);
       this.store.markRead('user');
@@ -345,7 +491,7 @@ export class Agent {
  * and APIConnectionError before APIError, because in these SDKs it is a
  * subclass rather than a sibling.
  */
-export function describe(e: unknown): string {
+export function describe(e: unknown, providerId?: string): string {
   if (e instanceof AuthenticationError || e instanceof OpenAI.AuthenticationError) {
     return 'That API key was rejected. Check it in Settings.';
   }
@@ -359,6 +505,11 @@ export function describe(e: unknown): string {
     return 'That model name was not found on this provider. Check it in Settings.';
   }
   if (e instanceof APIConnectionError || e instanceof OpenAI.APIConnectionError) {
+    // "Check the base URL" is useless advice when the real answer is that the
+    // runtime was never installed, which is the common case for a local preset.
+    if (providerId === 'ollama') {
+      return 'Nothing is answering on this machine. Install Ollama from ollama.com, start it, then run:  ollama pull phi4-mini';
+    }
     return 'Could not reach the provider. Check the base URL, or that the local model is running.';
   }
   if (e instanceof APIError) return `API error ${e.status ?? ''}: ${e.message}`.replace(' :', ':');

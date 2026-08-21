@@ -10,7 +10,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as http from 'node:http';
 import { Store } from '../src/main/store';
-import { Agent } from '../src/main/agent';
+import { Agent , claimsAChange , extractInlineToolCalls, stripInlineToolCalls } from '../src/main/agent';
 import { buildToolDefs } from '../src/main/tool-defs';
 import { PRESETS, preset } from '../src/main/providers';
 
@@ -254,7 +254,9 @@ describe('local models (Ollama / phi-4 shaped)', () => {
     expect(r?.text).toContain('You have four notes');
     // It must admit it cannot change anything, and name models that can.
     expect(r?.text).toMatch(/cannot call tools/i);
-    expect(r?.text).toMatch(/phi4-mini/);
+    // Recommends a model that actually calls tools. phi4-mini does not:
+    // it accepts the tools parameter, then answers without using them.
+    expect(r?.text).toMatch(/qwen2.5|llama3.1/);
     // The retry dropped `tools` rather than sending them again.
     expect(seen[0].tools).toBeTruthy();
     expect(seen[1].tools).toBeUndefined();
@@ -300,5 +302,69 @@ describe('local models (Ollama / phi-4 shaped)', () => {
     await agentFor().respond();   // providerId 'custom' → default max_tokens
     expect(seen[0].max_tokens).toBe(8000);
     expect(seen[0].max_completion_tokens).toBeUndefined();
+  });
+});
+
+describe('hallucinated changes', () => {
+  // phi4-mini, asked to add a note, answered "Added OLLAMA, "local model
+  // works", due in two days." having called no tool at all. Relaying that to
+  // the user is worse than any error, so the claim has to be caught.
+  it('catches a claim of a change that never happened', () => {
+    expect(claimsAChange('Added OLLAMA, "local model works", due in two days.')).toBe(true);
+    expect(claimsAChange('Your note has been added successfully.')).toBe(true);
+    expect(claimsAChange("Done. I've moved winwater to Friday.")).toBe(true);
+    expect(claimsAChange('Okay, deleted it.')).toBe(true);
+    expect(claimsAChange('Marked done.')).toBe(true);
+  });
+
+  it('leaves honest read answers alone', () => {
+    expect(claimsAChange('Two notes are burning: WINWATER and TAXES.')).toBe(false);
+    expect(claimsAChange('Nothing is due today.')).toBe(false);
+    expect(claimsAChange('You have 8 notes, 3 of them dated.')).toBe(false);
+    expect(claimsAChange('Which note did you mean?')).toBe(false);
+    // Mentions a past event without claiming to have caused it.
+    expect(claimsAChange('WINWATER was added yesterday and is due Friday.')).toBe(false);
+  });
+});
+
+describe('inline tool calls', () => {
+  // Verbatim from a real phi4-mini reply through Ollama 0.32.15. It decided
+  // to call the tool correctly, but wrote the call into the content instead
+  // of tool_calls, so Ollama never lifted it out.
+  const real =
+    'I\'m adding a note with the topic "OLLAMA," the comment "local model works," ' +
+    'and a deadline for 2 days from now.\n\n' +
+    '[{"name": "add_note", "arguments": {"topic": "OLLAMA", "comment": "local model works", "due": "in 2 days"}}]';
+
+  it('reads a call the runtime failed to parse', () => {
+    const calls = extractInlineToolCalls(real);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].name).toBe('add_note');
+    expect((calls[0].arguments as Record<string, unknown>).topic).toBe('OLLAMA');
+  });
+
+  it('reads a call after a literal tool_call token', () => {
+    const calls = extractInlineToolCalls('<|tool_call|>{"name":"snuff_note","arguments":{"id":"n_1"}}');
+    expect(calls).toHaveLength(1);
+    expect(calls[0].name).toBe('snuff_note');
+  });
+
+  it('handles several calls, and nesting', () => {
+    const calls = extractInlineToolCalls(
+      '[{"name":"add_note","arguments":{"topic":"A","comment":"x"}},' +
+      '{"name":"move_note","arguments":{"id":"n_1","col":0,"row":0}}]');
+    expect(calls.map((c) => c.name)).toEqual(['add_note', 'move_note']);
+  });
+
+  it('is not fooled by ordinary prose or unrelated JSON', () => {
+    expect(extractInlineToolCalls('Two notes are burning.')).toEqual([]);
+    expect(extractInlineToolCalls('The file is {"version": 2, "notes": []}.')).toEqual([]);
+    expect(extractInlineToolCalls('')).toEqual([]);
+  });
+
+  it('keeps the JSON out of the talk lane', () => {
+    const clean = stripInlineToolCalls(real);
+    expect(clean).not.toMatch(/"arguments"/);
+    expect(clean).toMatch(/adding a note/);
   });
 });

@@ -76,7 +76,7 @@ export const PRESETS: Preset[] = [
     baseUrl: 'http://127.0.0.1:11434/v1',
     defaultModel: 'phi4-mini',
     needsKey: false,
-    hint: 'Runs on this machine — no key, no bill. Use a model with tool support: phi4-mini, llama3.1, qwen2.5. Plain phi4 can talk but cannot change notes.',
+    hint: 'Runs on this machine — no key, no bill. phi4-mini works but is inconsistent; qwen2.5 or llama3.1 call tools more reliably. Plain phi4 can talk but cannot change notes.',
   },
   {
     id: 'custom',

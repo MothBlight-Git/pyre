@@ -23,6 +23,13 @@ export interface ToolDef {
   /** JSON Schema for the arguments. Kept plain so every SDK accepts it. */
   schema: Record<string, unknown>;
   run: (args: Record<string, unknown>) => Promise<string>;
+  /**
+   * True when the tool changes the wall. Weak local models sometimes answer a
+   * "move X to friday" with a confident "Done." and no tool call at all, so
+   * the caller needs to know whether anything actually happened before it
+   * repeats the claim to the user. See `claimsAChange` in agent.ts.
+   */
+  mutates?: boolean;
 }
 
 const obj = (properties: Record<string, unknown>, required: string[] = []) => ({
@@ -71,6 +78,7 @@ export function buildToolDefs(store: Store): ToolDef[] {
     },
     {
       name: 'add_note',
+      mutates: true,
       description: 'Put a new note on the wall. `due` accepts ISO or any composer form ("fri 9am", "tomorrow", "3d", "8/21 3pm"); omit it for no deadline. Give col and row only if the user asked for a specific position.',
       schema: obj({
         topic: str('Short topic, e.g. WINWATER. Empty becomes UNSORTED'),
@@ -92,6 +100,7 @@ export function buildToolDefs(store: Store): ToolDef[] {
     },
     {
       name: 'update_note',
+      mutates: true,
       description: "Change a note's topic, comment and/or due. Pass due as the word null to remove the deadline, which makes the note cold so it stops burning.",
       schema: obj({
         id: str('Note id'),
@@ -117,6 +126,7 @@ export function buildToolDefs(store: Store): ToolDef[] {
     },
     {
       name: 'move_note',
+      mutates: true,
       description: 'Pin a note to a grid cell, exactly as dragging it would. It holds that cell and hotter notes flow around it. Call get_grid first if you need to know what is free.',
       schema: obj({ id: str('Note id'), col: int('Column'), row: int('Row') }, ['id', 'col', 'row']),
       run: async (a) => {
@@ -126,6 +136,7 @@ export function buildToolDefs(store: Store): ToolDef[] {
     },
     {
       name: 'release_note',
+      mutates: true,
       description: 'Release a pinned note back to automatic placement, so it sorts by heat again.',
       schema: obj({ id: str('Note id') }, ['id']),
       run: async (a) => {
@@ -134,6 +145,7 @@ export function buildToolDefs(store: Store): ToolDef[] {
     },
     {
       name: 'bank_note',
+      mutates: true,
       description: 'Bank (snooze) a note until a time — damps the fire without ever changing the deadline. Pass until as the word null to un-bank.',
       schema: obj({
         id: str('Note id'),
@@ -150,6 +162,7 @@ export function buildToolDefs(store: Store): ToolDef[] {
     },
     {
       name: 'snuff_note',
+      mutates: true,
       description: 'Mark a note done. It leaves the wall for the Done archive and can be restored.',
       schema: obj({ id: str('Note id') }, ['id']),
       run: async (a) => {
@@ -158,6 +171,7 @@ export function buildToolDefs(store: Store): ToolDef[] {
     },
     {
       name: 'delete_note',
+      mutates: true,
       description: 'Permanently delete a note. Prefer snuff_note unless the user clearly wants it gone for good.',
       schema: obj({ id: str('Note id') }, ['id']),
       run: async (a) => {
