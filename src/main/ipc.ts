@@ -20,6 +20,8 @@ export interface IpcHost {
   testAssistant: () => Promise<{ ok: boolean; message: string }>;
   /** Show or hide the transparent inner strip that hosts the resize handle. */
   setGrabZone: (open: boolean) => void;
+  /** True while a resize handle is held; reservation updates wait for release. */
+  setDragging: (on: boolean) => void;
 }
 
 export function registerIpc(host: IpcHost): void {
@@ -52,6 +54,7 @@ export function registerIpc(host: IpcHost): void {
   h('app:providers', () => PRESETS);
   h('assistant:test', () => host.testAssistant());
   h('rail:grabZone', (open: boolean) => host.setGrabZone(!!open));
+  h('rail:dragging', (on: boolean) => host.setDragging(!!on));
 
   h('settings:get', () => store.settings());
   h('settings:set', (patch: Partial<Settings>) => {

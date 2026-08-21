@@ -52,6 +52,12 @@ export function createRailWindow(s: Settings, preload: string): BrowserWindow {
     ...b,
     frame: false,
     transparent: true,
+    // WS_EX_TOOLWINDOW. Tool windows are exempt from the shell's
+    // keep-inside-the-work-area repositioning — without this, every AppBar
+    // SETPOS shoves the window out of its own freshly reserved strip by
+    // exactly the reserved width (the release "bounce"). This is the fix
+    // native appbars use (FixedToolWindow); the wndproc veto stays as backup.
+    type: 'toolbar',
     backgroundColor: '#00000000',
     hasShadow: false,
     alwaysOnTop: s.alwaysOnTop,

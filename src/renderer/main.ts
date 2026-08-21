@@ -263,6 +263,7 @@ installDrag({
     el.addEventListener('pointerdown', (ev) => {
       start = { x: ev.screenX, width: settings.railWidth, dock: settings.dockSide };
       el.setPointerCapture(ev.pointerId);
+      void window.pyre.dragging(true);
     });
     el.addEventListener('pointermove', (ev) => {
       if (!start) return;
@@ -270,7 +271,7 @@ installDrag({
       pendingWidth = Math.max(280, Math.min(420, Math.round(start.width + delta)));
       if (!raf) raf = requestAnimationFrame(() => { raf = 0; commit(pendingWidth); });
     });
-    const end = () => { start = null; };
+    const end = () => { start = null; void window.pyre.dragging(false); };
     el.addEventListener('pointerup', end);
     el.addEventListener('pointercancel', end);
   };

@@ -162,6 +162,8 @@ export interface PyreBridge extends PyreApi {
   testAssistant(): Promise<{ ok: boolean; message: string }>;
   /** Grow/shrink the window's inner edge for the visible resize handle. */
   grabZone(open: boolean): Promise<void>;
+  /** Signal that a resize handle is held / released. */
+  dragging(on: boolean): Promise<void>;
   /** True while the assistant is mid-answer. */
   onAssistantBusy(cb: (busy: boolean) => void): () => void;
 }
