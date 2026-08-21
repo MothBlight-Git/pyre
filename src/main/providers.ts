@@ -82,10 +82,10 @@ export const PRESETS: Preset[] = [
     label: 'Ollama (local)',
     kind: 'openai',
     baseUrl: 'http://127.0.0.1:11434/v1',
-    defaultModel: 'phi4-mini',
+    defaultModel: 'qwen2.5:3b',
     needsKey: false,
     inlineToolHint: true,
-    hint: 'Runs on this machine — no key, no bill. phi4-mini is the default and works well. qwen2.5 and llama3.1 also work. Plain phi4 can talk but cannot change notes.',
+    hint: 'Runs on this machine — no key, no bill. qwen2.5:3b (1.9 GB) is the default: light, fast, and reads casual language well. phi4-mini works but misfires on casual phrasing. Plain phi4 cannot change notes at all.',
   },
   {
     id: 'custom',

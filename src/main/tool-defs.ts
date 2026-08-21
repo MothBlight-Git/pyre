@@ -110,7 +110,8 @@ export function buildToolDefs(store: Store): ToolDef[] {
         const placement = col !== undefined && row !== undefined
           ? { mode: 'manual' as const, col, row, pinnedAt: new Date().toISOString() }
           : { mode: 'auto' as const };
-        return show(store.add({ topic: String(a.topic ?? ''), comment: String(a.comment ?? ''), due, source: 'agent', placement }));
+        // An empty topic files under UNSORTED, same as a leading slash in the composer.
+        return show(store.add({ topic: String(a.topic ?? '').trim() || 'UNSORTED', comment: String(a.comment ?? ''), due, source: 'agent', placement }));
       },
     },
     {

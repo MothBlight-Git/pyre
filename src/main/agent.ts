@@ -45,7 +45,8 @@ const TEST_TIMEOUT_MS = 120_000;
 const INLINE_TOOL_HINT =
   'To call a tool, output ONLY the call, exactly in this format with nothing before or after it: ' +
   '<|tool_call|>[{"name":"tool_name","arguments":{...}}]  ' +
-  'After you see the tool results, answer the user in plain text with no more tool calls.';
+  'After you see the tool results, answer the user in plain text with no more tool calls. ' +
+  'The user never sees or writes tool calls — never ask the user to provide one or to use any format.';
 /** Hard stop on the OpenAI-side loop, so a confused model cannot spin forever. */
 const MAX_TOOL_ROUNDS = 8;
 /** How much of the lane to replay as conversation history. */
@@ -89,9 +90,11 @@ Every note, with its id:
 ${summary}
 
 Rules:
+- The user speaks casually. Translating into a tool call is YOUR job, never theirs. "add get groceries tomorrow" means: add_note with topic "GROCERIES" (pick a short topic word yourself), comment "get groceries", due "tomorrow".
 - To change anything you MUST call a tool. Use the id= value above. Every note already has an id.
 - update_note changes a deadline (due). move_note changes grid position. They are different.
 - Never claim you did something without calling the tool for it. Never say a note was not found while it is listed above.
+- Never mention formats, tools, ids or JSON to the user, and never say "invalid input" — if something is unclear, make the sensible choice and say what you did.
 - Reply in one or two plain sentences, no markdown. Use plain dates like "Friday 5pm", never ISO strings.`;
 }
 
@@ -247,7 +250,9 @@ export function extractInlineToolCalls(content: string): Array<{ name: string; a
     if (Array.isArray(v)) { v.forEach(take); return; }
     if (v && typeof v === 'object') {
       const o = v as Record<string, unknown>;
-      if (typeof o.name === 'string' && 'arguments' in o) found.push({ name: o.name, arguments: o.arguments });
+      // Models alias the arguments key freely: arguments, parameters, args.
+      const args = 'arguments' in o ? o.arguments : 'parameters' in o ? o.parameters : 'args' in o ? o.args : undefined;
+      if (typeof o.name === 'string' && args !== undefined) found.push({ name: o.name, arguments: args });
     }
   };
   // Try every balanced { or [ span. Cheap enough on a single reply, and far
@@ -546,7 +551,16 @@ export class Agent {
       // recent exchange is all the history that earns its place.
       const turnCap = preset(cfg.providerId).inlineToolHint ? 4 : HISTORY_TURNS;
       const turns = history(msgs, turnCap);
-      const tools = buildToolDefs(this.store);
+      let tools = buildToolDefs(this.store);
+      if (preset(cfg.providerId).inlineToolHint) {
+        // parse_line's description quotes the composer grammar, and given a
+        // grammar tool a small model turns grammar cop — a real reply told
+        // the user "Invalid input. Please use the format topic / comment /
+        // due" instead of just adding the note. get_grid similarly invites
+        // meta-answers. Neither is needed: the wall summary carries state,
+        // and translation is the model's job, stated in its prompt.
+        tools = tools.filter((t) => t.name !== 'parse_line' && t.name !== 'get_grid');
+      }
       const text = p.kind === 'anthropic'
         ? await runAnthropic(cfg, system, turns, tools)
         : await runOpenAI(cfg, system, turns, tools);

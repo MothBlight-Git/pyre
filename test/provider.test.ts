@@ -383,3 +383,10 @@ describe('claim tenses', () => {
     expect(claimsAChange('The hottest note is TAXES.')).toBe(false);
   });
 });
+
+describe('argument key aliases', () => {
+  it('reads parameters and args as arguments', () => {
+    expect(extractInlineToolCalls('[{"name":"add_note","parameters":{"topic":"A","comment":"x"}}]')[0].arguments).toEqual({ topic: 'A', comment: 'x' });
+    expect(extractInlineToolCalls('{"name":"snuff_note","args":{"id":"n_1"}}')[0].arguments).toEqual({ id: 'n_1' });
+  });
+});

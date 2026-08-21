@@ -140,30 +140,31 @@ If no external agent is connected, Pyre can drive the same tools directly. **Set
 | Google Gemini | `aistudio.google.com/apikey` | `gemini-2.5-flash` |
 | OpenAI | `platform.openai.com` | `gpt-5` |
 | OpenRouter | `openrouter.ai/keys` | `anthropic/claude-sonnet-4.5` |
-| **Ollama (local)** | **none** | **`phi4-mini`** |
+| **Ollama (local)** | **none** | **`qwen2.5:3b`** |
 | Custom | optional | any OpenAI-shaped endpoint |
 
 Keys are encrypted at rest with the OS keystore (DPAPI on Windows) in `credentials.bin`, never written to `settings.json` and never handed to the renderer — the window can set, clear and check a key but cannot read one back. `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY` and `OPENROUTER_API_KEY` are picked up from the environment if no key is stored.
 
-#### Ollama and phi-4
+#### Ollama — local models, measured
 
 Nothing leaves the machine, no key, no bill:
 
 ```
-ollama pull phi4-mini
+ollama pull qwen2.5:3b
 ```
 
-Then Settings → Assistant → **Ollama (local)** → TEST. Pyre talks to `http://127.0.0.1:11434/v1`; change the base URL if Ollama runs elsewhere. The first message after a cold start takes ~20 s while the model loads from disk.
+Then Settings → Assistant → **Ollama (local)** → TEST. Pyre talks to `http://127.0.0.1:11434/v1`; the first message after a cold start takes ~20 s while the model loads.
 
-**What actually happens with phi-4, measured against Ollama 0.32.15:**
+**Why qwen2.5:3b is the default** — a head-to-head on casual phrasing, same prompt, same wall:
 
-- **`phi4` (14B) has no tool template.** Ollama rejects the request outright. Pyre retries without tools so the model can still talk about your wall, and says plainly that it cannot change anything.
-- **`phi4-mini` (3.8B) works well — because Pyre meets it halfway.** Left alone it drifts: it accepts the `tools` parameter, then writes its calls into the reply body (sometimes behind a literal `<|tool_call|>` token) or claims success without calling anything. Pyre pins it down for the Ollama preset specifically: temperature 0, a compact system prompt sized for a 3.8B model, the exact output format it was trained on spelled out, and a short conversation window so one bad exchange cannot teach it to repeat itself. Inline calls are parsed out of the text and executed; the JSON never reaches the lane. Verified end to end: add, reschedule by topic, query, mark done — all landed with correct ids and dates.
-- **If a model still claims a change it never made, Pyre says so.** A reply asserting "Added X" or "Banking Y until Sunday" while no mutating tool ran gets a correction appended in the lane rather than being repeated as fact. A confident false "Done." is the one failure that never invites a second look.
+| Ask | qwen2.5:3b (1.9 GB) | phi4-mini (2.5 GB) |
+|---|---|---|
+| "add get groceries tmorrow" | ✓ | ✓ |
+| "remind me to call mom on friday" | ✓ one note | added a spurious second note, garbled reply |
+| "im done with the groceries one" | ✓ | ✓ |
+| "push bob back a couple days" | ✓ deadline moved | grid-moved the note; deadline untouched |
 
-You can also pass a topic where an id belongs — "move OLLAMA to friday" works when exactly one live note has that topic; two matches stays an error rather than a guess.
-
-`qwen2.5` and `llama3.1` also work, and speak the tool protocol natively. phi4-mini's appeal is size: 2.5 GB and it runs on anything.
+phi4-mini still works — Pyre reads its text-formatted tool calls, holds it to temperature 0, and corrects it when it claims a change it never made ("Added X" with an empty wall behind it gets a warning appended rather than repeated as fact). But interpreting casual language into the right tool is the actual job, and the smaller qwen does it reliably. `llama3.1` (4.9 GB) is also solid if you have the headroom. Plain `phi4` (14B) has no tool template at all: it can talk about the wall, never change it.
 
 ## Accessibility
 
