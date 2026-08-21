@@ -30,6 +30,14 @@ export interface Preset {
    * per-provider rather than guessed.
    */
   tokenParam?: 'max_tokens' | 'max_completion_tokens';
+  /**
+   * Local models (phi4-mini) need the tool-call output format spelled out in
+   * the system prompt, and temperature 0 to hold it. With both, phi4-mini is
+   * deterministic; without either it drifts between the protocol, inline JSON
+   * and plain prose claiming success. Protocol-correct providers never see
+   * this — telling gpt-5 to write inline calls would only teach it bad habits.
+   */
+  inlineToolHint?: boolean;
 }
 
 export const PRESETS: Preset[] = [
@@ -76,7 +84,8 @@ export const PRESETS: Preset[] = [
     baseUrl: 'http://127.0.0.1:11434/v1',
     defaultModel: 'phi4-mini',
     needsKey: false,
-    hint: 'Runs on this machine — no key, no bill. phi4-mini works but is inconsistent; qwen2.5 or llama3.1 call tools more reliably. Plain phi4 can talk but cannot change notes.',
+    inlineToolHint: true,
+    hint: 'Runs on this machine — no key, no bill. phi4-mini is the default and works well. qwen2.5 and llama3.1 also work. Plain phi4 can talk but cannot change notes.',
   },
   {
     id: 'custom',

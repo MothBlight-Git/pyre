@@ -32,6 +32,21 @@ export interface ToolDef {
   mutates?: boolean;
 }
 
+/**
+ * Models — small local ones reliably, big ones occasionally — pass a topic
+ * where an id belongs ("move OLLAMA to friday"). When the string is not an
+ * id but names exactly one live note, that note is unambiguous, so use it.
+ * Two notes sharing the topic stays an error: guessing between them would
+ * change the wrong one silently.
+ */
+const resolveId = (store: Store, raw: unknown): string => {
+  const v = String(raw ?? '');
+  const notes = store.notes();
+  if (notes.some((n) => n.id === v)) return v;
+  const named = notes.filter((n) => !n.done && n.topic.toLowerCase() === v.trim().toLowerCase());
+  return named.length === 1 ? named[0].id : v;
+};
+
 const obj = (properties: Record<string, unknown>, required: string[] = []) => ({
   type: 'object',
   properties,
@@ -103,7 +118,7 @@ export function buildToolDefs(store: Store): ToolDef[] {
       mutates: true,
       description: "Change a note's topic, comment and/or due. Pass due as the word null to remove the deadline, which makes the note cold so it stops burning.",
       schema: obj({
-        id: str('Note id'),
+        id: str('Note id, or the exact topic if it names only one note'),
         topic: str('New topic'),
         comment: str('New comment'),
         due: nullableStr('New deadline, or the word null to clear it'),
@@ -120,7 +135,7 @@ export function buildToolDefs(store: Store): ToolDef[] {
             patch.due = due;
           }
         }
-        try { return show(store.update(String(a.id), patch)); }
+        try { return show(store.update(resolveId(store, a.id), patch)); }
         catch (e) { return (e as Error).message; }
       },
     },
@@ -128,9 +143,9 @@ export function buildToolDefs(store: Store): ToolDef[] {
       name: 'move_note',
       mutates: true,
       description: 'Pin a note to a grid cell, exactly as dragging it would. It holds that cell and hotter notes flow around it. Call get_grid first if you need to know what is free.',
-      schema: obj({ id: str('Note id'), col: int('Column'), row: int('Row') }, ['id', 'col', 'row']),
+      schema: obj({ id: str('Note id, or the exact topic if it names only one note'), col: int('Column'), row: int('Row') }, ['id', 'col', 'row']),
       run: async (a) => {
-        try { return show(store.move(String(a.id), Number(a.col), Number(a.row))); }
+        try { return show(store.move(resolveId(store, a.id), Number(a.col), Number(a.row))); }
         catch (e) { return (e as Error).message; }
       },
     },
@@ -138,9 +153,9 @@ export function buildToolDefs(store: Store): ToolDef[] {
       name: 'release_note',
       mutates: true,
       description: 'Release a pinned note back to automatic placement, so it sorts by heat again.',
-      schema: obj({ id: str('Note id') }, ['id']),
+      schema: obj({ id: str('Note id, or the exact topic if it names only one note') }, ['id']),
       run: async (a) => {
-        try { return show(store.release(String(a.id))); } catch (e) { return (e as Error).message; }
+        try { return show(store.release(resolveId(store, a.id))); } catch (e) { return (e as Error).message; }
       },
     },
     {
@@ -148,15 +163,15 @@ export function buildToolDefs(store: Store): ToolDef[] {
       mutates: true,
       description: 'Bank (snooze) a note until a time — damps the fire without ever changing the deadline. Pass until as the word null to un-bank.',
       schema: obj({
-        id: str('Note id'),
+        id: str('Note id, or the exact topic if it names only one note'),
         until: nullableStr('When banking ends ("2h", "tomorrow 9am"), or the word null to un-bank'),
       }, ['id', 'until']),
       run: async (a) => {
         try {
-          if (nullish(a.until)) return show(store.unbank(String(a.id)));
+          if (nullish(a.until)) return show(store.unbank(resolveId(store, a.id)));
           const until = resolveDue(store, s(a.until));
           if (!until) return `Could not read "${s(a.until)}" as a time.`;
-          return show(store.bank(String(a.id), until));
+          return show(store.bank(resolveId(store, a.id), until));
         } catch (e) { return (e as Error).message; }
       },
     },
@@ -164,18 +179,18 @@ export function buildToolDefs(store: Store): ToolDef[] {
       name: 'snuff_note',
       mutates: true,
       description: 'Mark a note done. It leaves the wall for the Done archive and can be restored.',
-      schema: obj({ id: str('Note id') }, ['id']),
+      schema: obj({ id: str('Note id, or the exact topic if it names only one note') }, ['id']),
       run: async (a) => {
-        try { return show(store.snuff(String(a.id))); } catch (e) { return (e as Error).message; }
+        try { return show(store.snuff(resolveId(store, a.id))); } catch (e) { return (e as Error).message; }
       },
     },
     {
       name: 'delete_note',
       mutates: true,
       description: 'Permanently delete a note. Prefer snuff_note unless the user clearly wants it gone for good.',
-      schema: obj({ id: str('Note id') }, ['id']),
+      schema: obj({ id: str('Note id, or the exact topic if it names only one note') }, ['id']),
       run: async (a) => {
-        try { return JSON.stringify(store.remove(String(a.id))); } catch (e) { return (e as Error).message; }
+        try { return JSON.stringify(store.remove(resolveId(store, a.id))); } catch (e) { return (e as Error).message; }
       },
     },
     {

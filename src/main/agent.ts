@@ -34,6 +34,18 @@ const REQUEST_TIMEOUT_MS = 90_000;
 // on a warm SSD, and a cold page cache is slower. The test must outlast that or
 // it reports "unreachable" for a server that is merely still waking up.
 const TEST_TIMEOUT_MS = 120_000;
+
+/**
+ * Appended to the system prompt for presets with `inlineToolHint`. phi4-mini
+ * was trained on this exact call shape; shown it, at temperature 0, it emits
+ * a clean parseable call every time. Without it, it drifts — protocol, inline
+ * JSON, or plain prose claiming success — which reads as a broken model when
+ * it is really an underspecified prompt.
+ */
+const INLINE_TOOL_HINT =
+  'To call a tool, output ONLY the call, exactly in this format with nothing before or after it: ' +
+  '<|tool_call|>[{"name":"tool_name","arguments":{...}}]  ' +
+  'After you see the tool results, answer the user in plain text with no more tool calls.';
 /** Hard stop on the OpenAI-side loop, so a confused model cannot spin forever. */
 const MAX_TOOL_ROUNDS = 8;
 /** How much of the lane to replay as conversation history. */
@@ -51,6 +63,36 @@ export interface AgentConfig {
   /** Overrides the preset's base URL when set. */
   baseUrl?: string;
   apiKey: string | null;
+}
+
+/**
+ * The compact variant for small local models. The full prompt explains Pyre's
+ * mechanics in ~40 lines; a 3.8B model drowns in it — given the full text,
+ * phi4-mini theorised that "warming notes do not have ids yet" instead of
+ * reading the id printed right in front of it. Short declaratives, the wall
+ * with ids, and one unmissable rule about acting via tools.
+ */
+export function compactSystemPrompt(store: Store, now: Date): string {
+  const notes = store.notes().filter((n) => !n.done);
+  const slots = layoutFor(store, notes, now).slots;
+  const summary = notes.length
+    ? notes.map((n) => {
+        const b = evaluate(n, now);
+        const s = slots.get(n.id);
+        return `  id=${n.id} topic=${displayTopic(n.topic)} state=${b.state}${b.label ? ' (' + b.label + ')' : ''}${n.due ? ' due=' + new Date(n.due).toLocaleString() : ''} at ${s ? `col ${s.col}, row ${s.row}` : '-'} — ${n.comment.slice(0, 50)}`;
+      }).join('\n')
+    : '  (the wall is empty)';
+
+  return `You are the assistant inside Pyre, the user's wall of deadline notes. Now: ${now.toLocaleString()}.
+
+Every note, with its id:
+${summary}
+
+Rules:
+- To change anything you MUST call a tool. Use the id= value above. Every note already has an id.
+- update_note changes a deadline (due). move_note changes grid position. They are different.
+- Never claim you did something without calling the tool for it. Never say a note was not found while it is listed above.
+- Reply in one or two plain sentences, no markdown. Use plain dates like "Friday 5pm", never ISO strings.`;
 }
 
 export function systemPrompt(store: Store, now: Date): string {
@@ -89,9 +131,9 @@ How to write:
 }
 
 /** Map the talk lane onto provider-neutral turns. */
-function history(messages: Message[]): Array<{ role: 'user' | 'assistant'; content: string }> {
+function history(messages: Message[], cap: number = HISTORY_TURNS): Array<{ role: 'user' | 'assistant'; content: string }> {
   const out: Array<{ role: 'user' | 'assistant'; content: string }> = [];
-  for (const m of messages.slice(-HISTORY_TURNS)) {
+  for (const m of messages.slice(-cap)) {
     const role = m.role === 'user' ? 'user' : 'assistant';
     // The APIs reject an empty conversation and want the first turn to be the user's.
     if (out.length === 0 && role !== 'user') continue;
@@ -177,8 +219,13 @@ function parseToolArgs(raw: unknown): Record<string, unknown> | null {
  */
 export function claimsAChange(text: string): boolean {
   const t = text.trim();
-  const asserted = /^(?:(?:ok|okay|sure|alright|done|great)[,.!\s]*)?(?:i(?:'ve| have)?\s+)?(?:added|created|moved|pinned|released|banked|snoozed|deleted|removed|snuffed|updated|renamed|marked|set)\b/i;
-  const passive = /\b(?:has|have) been (?:added|created|moved|pinned|released|banked|snoozed|deleted|removed|updated|marked)\b/i;
+  // Past tense ("Added X"), progressive ("Banking X until sunday") and
+  // passive ("has been added") all appear in real phi4-mini output as claims
+  // for actions it never took. `set` needs its own alternative: it does not
+  // inflect ("set the deadline" is also an imperative), so only the bare form.
+  const verbs = "(?:add|creat|mov|pinn?|releas|bank|snooz|delet|remov|snuff|updat|renam|mark|sett)(?:ed|ing)|set";
+  const asserted = new RegExp(`^(?:(?:ok|okay|sure|alright|done|great)[,.!\\s]*)?(?:i(?:'ve| have| am|'m)?\\s+)?(?:${verbs})\\b`, 'i');
+  const passive = new RegExp(`\\b(?:has|have) been (?:${verbs})\\b`, 'i');
   return asserted.test(t) || passive.test(t);
 }
 
@@ -240,6 +287,9 @@ export function stripInlineToolCalls(content: string): string {
 }
 
 async function runOpenAI(cfg: AgentConfig, system: string, turns: ReturnType<typeof history>, tools: ToolDef[]): Promise<string> {
+  // Same gate as the main-process log. Which tool ran with which arguments is
+  // the first question every misbehaving-model session asks.
+  const tlog = (m: string) => { if (process.env.PYRE_DEBUG) console.log(`[pyre agent] ${m}`); };
   const p = preset(cfg.providerId);
   const client = new OpenAI({
     // Local runtimes accept any non-empty key; cloud ones need the real thing.
@@ -255,7 +305,9 @@ async function runOpenAI(cfg: AgentConfig, system: string, turns: ReturnType<typ
   }));
 
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-    { role: 'system', content: system },
+    { role: 'system', content: p.inlineToolHint ? `${system}
+
+${INLINE_TOOL_HINT}` : system },
     ...turns,
   ];
 
@@ -267,6 +319,9 @@ async function runOpenAI(cfg: AgentConfig, system: string, turns: ReturnType<typ
   // call. Repeating that to the user is worse than any error message, so we
   // track whether the wall was genuinely touched this turn.
   let mutationsRun = 0;
+  // Which tools actually ran, for a locally written confirmation when the
+  // model's own wrap-up line is unusable.
+  const ran: string[] = [];
 
   const ask = async () => {
     const body: Record<string, unknown> = {
@@ -274,6 +329,8 @@ async function runOpenAI(cfg: AgentConfig, system: string, turns: ReturnType<typ
       messages,
       [p.tokenParam ?? 'max_tokens']: MAX_TOKENS,
     };
+    // Determinism is what holds a small model to the format it was shown.
+    if (p.inlineToolHint) body.temperature = 0;
     if (useTools) body.tools = spec;
     return client.chat.completions.create(body as never) as Promise<OpenAI.Chat.ChatCompletion>;
   };
@@ -305,9 +362,21 @@ async function runOpenAI(cfg: AgentConfig, system: string, turns: ReturnType<typ
     // phi4-mini writes its tool calls into the content instead. Read them
     // rather than treating a correct decision as a hallucination.
     const inline = calls.length ? [] : extractInlineToolCalls(msg.content ?? '');
+    tlog(`reply: tool_calls=${calls.length} inline=${inline.length} content=${JSON.stringify((msg.content ?? '').slice(0, 300))}`);
 
     if (!calls.length && !inline.length) {
-      const text = stripInlineToolCalls(msg.content ?? '');
+      let text = stripInlineToolCalls(msg.content ?? '');
+      // After its tools ran, phi4-mini sometimes "answers" with another
+      // half-formed invocation — "move_note n_egkpyt 0 0", or invented ones
+      // like "change_note_n_p60dgu_due_2026-08-23…". Both real, neither a
+      // sentence. Machine noise: a known tool name, snake_case runs, a note
+      // id, or a bare ISO timestamp where prose should be.
+      const toolNoise = new RegExp(`^\\s*(?:${[...byName.keys()].join('|')})\\b`, 'i');
+      const machiney = !/\s/.test(text) && /_/.test(text);
+      const idNoise = /^n_[a-z0-9]{6}\b/.test(text) || /^\d{4}-\d{2}-\d{2}T/.test(text);
+      if (mutationsRun > 0 && (!text || toolNoise.test(text) || machiney || idNoise)) {
+        text = `Done (${ran.join(', ')}).`;
+      }
       if (toolsWereRefused) {
         return `${text || 'I can only talk about the wall right now.'}\n\n(This model cannot call tools, so I cannot change notes. Try qwen2.5 or llama3.1.)`;
       }
@@ -330,8 +399,10 @@ async function runOpenAI(cfg: AgentConfig, system: string, turns: ReturnType<typ
         const args = parseToolArgs(c.arguments);
         if (!args) { lines.push(`${c.name} → could not parse arguments`); continue; }
         try {
+          tlog(`inline ${c.name}(${JSON.stringify(args)})`);
           const r = await def.run(args);
           if (def.mutates) mutationsRun++;
+          ran.push(c.name);
           lines.push(`${c.name} → ${r}`);
         } catch (e) {
           lines.push(`${c.name} → failed: ${(e as Error).message}`);
@@ -353,7 +424,8 @@ async function runOpenAI(cfg: AgentConfig, system: string, turns: ReturnType<typ
         const args = parseToolArgs(fn.arguments);
         if (!args) result = `Could not parse the arguments for ${fn.name}.`;
         else {
-          try { result = await def.run(args); if (def.mutates) mutationsRun++; }
+          tlog(`protocol ${fn.name}(${JSON.stringify(args)})`);
+          try { result = await def.run(args); if (def.mutates) mutationsRun++; ran.push(fn.name); }
           catch (e) { result = `Tool failed: ${(e as Error).message}`; }
         }
       }
@@ -402,11 +474,14 @@ export async function testProvider(cfg: AgentConfig): Promise<{ ok: boolean; mes
         const r = await client.chat.completions.create({
           model: cfg.model,
           messages: [
-            { role: 'system', content: 'You manage a wall of deadline notes. You have tools. When the user asks for a change, call the matching tool — never claim a change you have not made by calling a tool.' },
+            { role: 'system', content: 'You manage a wall of deadline notes. You have tools. When the user asks for a change, call the matching tool — never claim a change you have not made by calling a tool.' + (p.inlineToolHint ? `
+
+${INLINE_TOOL_HINT}` : '') },
             { role: 'user', content: 'Add a note with topic TEST and comment hello.' },
           ],
           tools: probe,
           [p.tokenParam ?? 'max_tokens']: 200,
+          ...(p.inlineToolHint ? { temperature: 0 } : {}),
         } as never) as OpenAI.Chat.ChatCompletion;
         const m = r.choices[0]?.message;
         viaProtocol = (m?.tool_calls ?? []).length > 0;
@@ -419,7 +494,7 @@ export async function testProvider(cfg: AgentConfig): Promise<{ ok: boolean; mes
       }
       return viaProtocol
         ? { ok: true, message: `${cfg.model} answered and called the tool correctly.` }
-        : { ok: true, message: `${cfg.model} works. It writes tool calls as text instead of using the tool protocol; Pyre reads those, so changes land — but it is less consistent than qwen2.5 or llama3.1.` };
+        : { ok: true, message: `${cfg.model} works. It writes tool calls as text instead of using the tool protocol; Pyre reads those, so changes land.` };
     } catch (e) {
       if (looksLikeNoToolSupport(e)) {
         return { ok: false, message: `${cfg.model} runs, but cannot call tools — it can talk about the wall without changing it. Try qwen2.5 or llama3.1.` };
@@ -462,8 +537,15 @@ export class Agent {
     this.busy = true;
     try {
       const now = new Date();
-      const system = systemPrompt(this.store, now);
-      const turns = history(msgs);
+      const system = preset(cfg.providerId).inlineToolHint
+        ? compactSystemPrompt(this.store, now)
+        : systemPrompt(this.store, now);
+      // A small model at temperature 0 re-derives its own last mistake from a
+      // long transcript, verbatim, forever — one bad exchange poisons every
+      // attempt after it. Current state lives in the wall summary, so the
+      // recent exchange is all the history that earns its place.
+      const turnCap = preset(cfg.providerId).inlineToolHint ? 4 : HISTORY_TURNS;
+      const turns = history(msgs, turnCap);
       const tools = buildToolDefs(this.store);
       const text = p.kind === 'anthropic'
         ? await runAnthropic(cfg, system, turns, tools)

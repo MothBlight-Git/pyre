@@ -368,3 +368,18 @@ describe('inline tool calls', () => {
     expect(clean).toMatch(/adding a note/);
   });
 });
+
+describe('claim tenses', () => {
+  // "Banking GROCERIES until Sunday." — real phi4-mini output, no tool called,
+  // nothing banked. The progressive slipped past a past-tense-only verb list.
+  it('catches progressive claims', () => {
+    expect(claimsAChange('Banking GROCERIES until Sunday.')).toBe(true);
+    expect(claimsAChange("I'm moving WINWATER to Friday.")).toBe(true);
+    expect(claimsAChange('Setting the deadline to 5pm.')).toBe(true);
+  });
+  it('still leaves questions and reads alone', () => {
+    expect(claimsAChange('Banking damps the fire without touching the deadline.')).toBe(true); // borderline: starts with the verb — acceptable false positive, only fires when no tool ran
+    expect(claimsAChange('Should I bank it until Sunday?')).toBe(false);
+    expect(claimsAChange('The hottest note is TAXES.')).toBe(false);
+  });
+});

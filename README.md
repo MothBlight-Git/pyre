@@ -158,12 +158,12 @@ Then Settings → Assistant → **Ollama (local)** → TEST. Pyre talks to `http
 **What actually happens with phi-4, measured against Ollama 0.32.15:**
 
 - **`phi4` (14B) has no tool template.** Ollama rejects the request outright. Pyre retries without tools so the model can still talk about your wall, and says plainly that it cannot change anything.
-- **`phi4-mini` (3.8B) works, but writes its tool calls as text.** It produces a JSON blob in the reply body — sometimes after a literal `<|tool_call|>` token — instead of using the tool protocol, and Ollama does not lift it out. **Pyre parses those out and executes them**, so notes really do get added, moved and banked. Without that, the model looks like it is lying when it is really just being misread.
-- **It is inconsistent.** Across repeated identical runs it used the proper tool protocol, wrote an inline call, or answered without calling anything — roughly two times in three it acts. TEST runs the probe twice before reporting anything against a model, for exactly this reason.
+- **`phi4-mini` (3.8B) works well — because Pyre meets it halfway.** Left alone it drifts: it accepts the `tools` parameter, then writes its calls into the reply body (sometimes behind a literal `<|tool_call|>` token) or claims success without calling anything. Pyre pins it down for the Ollama preset specifically: temperature 0, a compact system prompt sized for a 3.8B model, the exact output format it was trained on spelled out, and a short conversation window so one bad exchange cannot teach it to repeat itself. Inline calls are parsed out of the text and executed; the JSON never reaches the lane. Verified end to end: add, reschedule by topic, query, mark done — all landed with correct ids and dates.
+- **If a model still claims a change it never made, Pyre says so.** A reply asserting "Added X" or "Banking Y until Sunday" while no mutating tool ran gets a correction appended in the lane rather than being repeated as fact. A confident false "Done." is the one failure that never invites a second look.
 
-**When a model claims a change it never made, Pyre says so.** If a reply asserts "Added OLLAMA, due in two days" while no mutating tool ran, the lane appends a warning rather than repeating the claim. This is the failure that matters — an error message is recoverable, a confident false "Done." is not.
+You can also pass a topic where an id belongs — "move OLLAMA to friday" works when exactly one live note has that topic; two matches stays an error rather than a guess.
 
-For reliable tool calling, `qwen2.5` or `llama3.1` are better behaved. phi4-mini's appeal is size: 2.5 GB and it runs on anything.
+`qwen2.5` and `llama3.1` also work, and speak the tool protocol natively. phi4-mini's appeal is size: 2.5 GB and it runs on anything.
 
 ## Accessibility
 
